@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Poker Leak Finder"
+version = "1.0.0"
+id = "artifacts/poker-leak-finder"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24940
+
+[services.development]
+run = "pnpm --filter @workspace/poker-leak-finder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/poker-leak-finder", "run", "build" ]
+publicDir = "artifacts/poker-leak-finder/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24940"
+BASE_PATH = "/"
