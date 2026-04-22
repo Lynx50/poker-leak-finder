@@ -220,6 +220,10 @@ export type DashboardGradeSummary = {
   };
 };
 
+export type BaselineFrequencyAdjustment = {
+  baselinePercent: number;
+};
+
 export type PreflopOpportunity = {
   handId: string;
   nodeKey: string;

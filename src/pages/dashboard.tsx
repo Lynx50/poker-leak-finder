@@ -6,6 +6,7 @@ import {
   Download,
   FileText,
   Filter,
+  Info,
   RefreshCw,
   Search,
   Settings2,
@@ -19,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
 import {
@@ -93,6 +95,10 @@ const EMPTY_FILTERS: FilterState = {
 
 const RANGE_ACTIONS: RangeAction[] = ["Raise", "Call", "Fold", "Jam", "Check", "Continue"];
 const UPLOAD_HISTORY_KEY = "poker-leak-finder-upload-history";
+const EXPERIMENTAL_RFI_POSITION: Position = "BTN";
+const EXPERIMENTAL_RFI_ACTION: GradingActionFamily = "RFI";
+const EXPERIMENTAL_RFI_STACK_BUCKET = STACK_DEPTH_BUCKETS.find((bucket) => bucket.startsWith("20")) ?? STACK_DEPTH_BUCKETS[2];
+const EXPERIMENTAL_RFI_CARD_KEY = `${EXPERIMENTAL_RFI_POSITION}:${EXPERIMENTAL_RFI_STACK_BUCKET}:${EXPERIMENTAL_RFI_ACTION}`;
 
 const SEVERITY_STYLES: Record<AnalysisResult["severity"], string> = {
   High: "border-orange-500/30 bg-orange-500/10 text-orange-400",
@@ -260,38 +266,38 @@ function GradeTile({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-xl border bg-background p-5 text-left transition hover:border-primary/40 hover:bg-muted/30",
+        "rounded-2xl border bg-background p-6 text-left transition hover:border-primary/40 hover:bg-muted/30",
         active ? "border-primary/50 bg-primary/5" : "border-border",
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-lg font-semibold leading-tight text-white">{card.label}</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Full sample plus rolling-grade signal</p>
+          <p className="font-mono text-xl font-semibold leading-tight text-white">{card.label}</p>
+          <p className="mt-2 text-base leading-relaxed text-muted-foreground">Full sample plus rolling-grade signal</p>
         </div>
-        <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", getGradeTone(card))}>
+        <Badge variant="outline" className={cn("border px-4 py-1.5 font-mono text-xl", getGradeTone(card))}>
           {card.grade}
         </Badge>
       </div>
-      <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+      <div className="mt-6 grid grid-cols-2 gap-4 text-base">
         <div>
           <p className="text-muted-foreground">Opportunities</p>
-          <p className="mt-1 font-mono text-xl text-white">{card.opportunityCount}</p>
+          <p className="mt-1 font-mono text-2xl text-white">{card.opportunityCount}</p>
         </div>
         <div>
           <p className="text-muted-foreground">Scored</p>
-          <p className="mt-1 font-mono text-xl text-white">{card.scoredCount}</p>
+          <p className="mt-1 font-mono text-2xl text-white">{card.scoredCount}</p>
         </div>
         <div>
           <p className="text-muted-foreground">Mistakes</p>
-          <p className="mt-1 font-mono text-xl text-white">{card.mistakeCount}</p>
+          <p className="mt-1 font-mono text-2xl text-white">{card.mistakeCount}</p>
         </div>
         <div>
           <p className="text-muted-foreground">Mistake rate</p>
-          <p className="mt-1 font-mono text-xl text-white">{formatPercent(card.mistakeRate)}</p>
+          <p className="mt-1 font-mono text-2xl text-white">{formatPercent(card.mistakeRate)}</p>
         </div>
       </div>
-      <div className="mt-4 text-sm text-muted-foreground">
+      <div className="mt-5 text-base text-muted-foreground">
         {card.status === "stable" ? "Reliable sample" : card.status === "provisional" ? "Provisional sample" : "Needs more scored spots"}
       </div>
       {card.actionFrequency && (
@@ -360,6 +366,7 @@ export default function Dashboard() {
   const [tournamentFormatFilter, setTournamentFormatFilter] = useState<TournamentFormatFilter>("all_tournaments");
   const [selectedDrilldown, setSelectedDrilldown] = useState<DrilldownSelection | null>(null);
   const [storedUploadBatches, setStoredUploadBatches] = useState<StoredUploadBatch[]>([]);
+  const [experimentalRfiDelta, setExperimentalRfiDelta] = useState(0);
 
   const effectiveRangeNodes = useMemo(() => getEffectiveRangeNodes(rangeLibrary), [rangeLibrary]);
   const editableNodeKeys = useMemo(() => Object.keys(effectiveRangeNodes).sort(), [effectiveRangeNodes]);
@@ -474,10 +481,48 @@ export default function Dashboard() {
     return new Map<string, GradingEligibility>(entries);
   }, [gradingEligibilitySummary]);
 
-  const dashboardGrades = useMemo(
-    () => buildDashboardGradeSummary(gradingEligibilitySummary.scored, report?.opportunities ?? [], tournamentFormatFilter, DEFAULT_ROLLING_WINDOW_CONFIG),
+  const baseDashboardGrades = useMemo(
+    () =>
+      buildDashboardGradeSummary(
+        gradingEligibilitySummary.scored,
+        report?.opportunities ?? [],
+        tournamentFormatFilter,
+        DEFAULT_ROLLING_WINDOW_CONFIG,
+      ),
     [gradingEligibilitySummary.scored, report?.opportunities, tournamentFormatFilter],
   );
+
+  const experimentalRfiBaseCard = useMemo(() => {
+    const stackMap = baseDashboardGrades.byPositionActionStack[EXPERIMENTAL_RFI_POSITION] ?? {};
+    return stackMap[EXPERIMENTAL_RFI_STACK_BUCKET]?.find((card) => card.key === EXPERIMENTAL_RFI_CARD_KEY) ?? null;
+  }, [baseDashboardGrades]);
+
+  const experimentalRfiBasePercent = experimentalRfiBaseCard?.actionFrequency?.baselinePercent ?? 0.469;
+  const experimentalRfiAdjustedPercent = Math.max(
+    0,
+    Math.min(1, experimentalRfiBasePercent + experimentalRfiDelta / 100),
+  );
+
+  const dashboardGrades = useMemo(
+    () =>
+      buildDashboardGradeSummary(
+        gradingEligibilitySummary.scored,
+        report?.opportunities ?? [],
+        tournamentFormatFilter,
+        DEFAULT_ROLLING_WINDOW_CONFIG,
+        {
+          [EXPERIMENTAL_RFI_CARD_KEY]: {
+            baselinePercent: experimentalRfiAdjustedPercent,
+          },
+        },
+      ),
+    [gradingEligibilitySummary.scored, report?.opportunities, tournamentFormatFilter, experimentalRfiAdjustedPercent],
+  );
+
+  const experimentalRfiAdjustedCard = useMemo(() => {
+    const stackMap = dashboardGrades.byPositionActionStack[EXPERIMENTAL_RFI_POSITION] ?? {};
+    return stackMap[EXPERIMENTAL_RFI_STACK_BUCKET]?.find((card) => card.key === EXPERIMENTAL_RFI_CARD_KEY) ?? null;
+  }, [dashboardGrades]);
 
   const handCoverageBreakdown = useMemo(() => {
     const totalHands = report?.totalHands ?? 0;
@@ -485,32 +530,32 @@ export default function Dashboard() {
     const toPercent = (count: number) => (totalHands > 0 ? count / totalHands : 0);
     const skippedRows: { label: string; reason: SkipReason; tooltip: string }[] = [
       {
-        label: "Multiway pots",
+        label: "multiway",
         reason: "MULTIWAY",
         tooltip: "Hands skipped because more than two players created a multiway preflop branch outside the current scoring model.",
       },
       {
-        label: "3-bet pots",
+        label: "three_bet_pot",
         reason: "THREE_BET_POT",
         tooltip: "Hands skipped because the preflop action reached a 3-bet, 4-bet, or higher-complexity reraised branch not scored here.",
       },
       {
-        label: "Limped pots",
+        label: "limped_pot",
         reason: "LIMPED_POT",
         tooltip: "Hands skipped because one or more players limped before the hero decision.",
       },
       {
-        label: "Hero not involved",
+        label: "hero_not_involved",
         reason: "HERO_NOT_INVOLVED",
         tooltip: "Hands where the parser did not find a clean hero preflop decision to classify.",
       },
       {
-        label: "Walks",
+        label: "walk",
         reason: "WALK",
         tooltip: "Hands where the blinds were awarded without a meaningful hero preflop decision.",
       },
       {
-        label: "Parser errors",
+        label: "parser_error",
         reason: "PARSER_ERROR",
         tooltip: "Hands that could not be parsed because required metadata, cards, position, or action text was missing or malformed.",
       },
@@ -1026,8 +1071,8 @@ export default function Dashboard() {
 
             <Card className="border-primary/20 bg-card">
               <CardHeader>
-                <CardTitle className="text-white">Hand Coverage Breakdown</CardTitle>
-                <CardDescription>Why uploaded hands were or were not scored by the current model.</CardDescription>
+                <CardTitle className="text-white">Hand Classification Breakdown</CardTitle>
+                <CardDescription>Hands scored vs. total uploaded, plus why some hands are visible but unscored.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1036,7 +1081,7 @@ export default function Dashboard() {
                     <p className="mt-2 font-mono text-3xl text-white">{handCoverageBreakdown.totalHands}</p>
                   </div>
                   <div className="rounded-lg border border-border bg-background p-4">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">Scored Hands</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">Hands scored vs. total uploaded</p>
                     <p className="mt-2 font-mono text-3xl text-white">
                       {handCoverageBreakdown.scoredHands}
                       <span className="ml-2 text-base text-primary">
@@ -1047,7 +1092,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="rounded-lg border border-border bg-background p-4">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Not Scored Breakdown</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Unscored Hands Breakdown</p>
                   <div className="mt-3 space-y-2">
                     {handCoverageBreakdown.rows.map((entry) => (
                       <div
@@ -1055,7 +1100,10 @@ export default function Dashboard() {
                         title={entry.tooltip}
                         className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
                       >
-                        <span className="text-sm text-white">{entry.label}</span>
+                        <span className="flex items-center gap-2 text-sm text-white">
+                          {entry.label}
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </span>
                         <span className="font-mono text-sm text-muted-foreground">
                           {entry.count} ({formatOneDecimalPercent(entry.percent)})
                         </span>
@@ -1104,7 +1152,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-8">
               {dashboardGrades.tournament.usesFallbackBaseline && (
                 <div className="rounded-md border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-200">
                   {dashboardGrades.tournament.type === "all_tournaments"
@@ -1114,12 +1162,36 @@ export default function Dashboard() {
               )}
 
               <div>
-                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6">
-                  <p className="text-sm uppercase tracking-wider text-muted-foreground">Overall Preflop Grade</p>
-                  <div className="mt-5 flex items-end justify-between gap-4">
+                <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-3xl font-semibold text-white">Grade By Position</h3>
+                    <p className="mt-2 text-lg text-muted-foreground">
+                      Your main dashboard view. Click a position to drill into RFI, calls, 3-bets, folds, jams, and stack depth.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary">
+                    Primary study map
+                  </Badge>
+                </div>
+                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                  {dashboardGrades.positions.map((card) => (
+                    <GradeTile
+                      key={card.key}
+                      card={card}
+                      active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
+                      onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+                  <p className="text-sm uppercase tracking-wider text-muted-foreground">Overall Grade</p>
+                  <div className="mt-4 flex items-end justify-between gap-4">
                     <div>
-                      <p className="font-mono text-7xl font-bold leading-none text-white">{dashboardGrades.overall.grade}</p>
-                      <p className="mt-3 text-base text-muted-foreground">
+                      <p className="font-mono text-5xl font-bold leading-none text-white">{dashboardGrades.overall.grade}</p>
+                      <p className="mt-2 text-base text-muted-foreground">
                         {dashboardGrades.overall.status === "stable"
                           ? "Stable grade"
                           : dashboardGrades.overall.status === "provisional"
@@ -1128,36 +1200,17 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono text-3xl text-primary">{dashboardGrades.overall.score ?? "--"}</p>
+                      <p className="font-mono text-2xl text-primary">{dashboardGrades.overall.score ?? "--"}</p>
                       <p className="text-sm text-muted-foreground">score</p>
                     </div>
                   </div>
-                  <p className="mt-5 text-base leading-relaxed text-muted-foreground">{dashboardGrades.overall.studyHint}</p>
-                  <div className="mt-5 grid gap-4 sm:grid-cols-4">
-                    <div>
-                      <p className="text-sm uppercase tracking-wider text-muted-foreground">Recent scored spots</p>
-                      <p className="mt-1 font-mono text-base text-white">
-                        {dashboardGrades.rollingWindow.activeDecisionCount}/{dashboardGrades.rollingWindow.totalDecisionCount}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm uppercase tracking-wider text-muted-foreground">Stable At</p>
-                      <p className="mt-1 font-mono text-base text-white">{dashboardGrades.rollingWindow.minStableSample} scored spots</p>
-                    </div>
-                    <div>
-                      <p className="text-sm uppercase tracking-wider text-muted-foreground">Unscored</p>
-                      <p className="mt-1 font-mono text-base text-white">{gradingEligibilitySummary.visibleUnscoredDecisions}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm uppercase tracking-wider text-muted-foreground">Stored Runs</p>
-                      <p className="mt-1 font-mono text-base text-white">{storedUploadBatches.length}</p>
-                    </div>
-                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{dashboardGrades.overall.studyHint}</p>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Grades use the most recent {dashboardGrades.rollingWindow.recentHandLimit} scored opportunities.
+                  </p>
                 </div>
-              </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-6">
+                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-5">
                   <p className="text-sm uppercase tracking-wider text-orange-200">Recommended Next Study Spot</p>
                   {dashboardGrades.studyRecommendation ? (
                     <>
@@ -1170,7 +1223,9 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
+              </div>
 
+              <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
                 <div className="rounded-2xl border border-border bg-background p-6">
                   <p className="text-sm uppercase tracking-wider text-muted-foreground">Biggest Leaks</p>
                   {dashboardGrades.biggestLeaks.length > 0 ? (
@@ -1181,14 +1236,12 @@ export default function Dashboard() {
                           type="button"
                           onClick={() => setSelectedDrilldown({ type: "leak", key: leak.label })}
                           className={cn(
-                            "flex w-full items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2 text-left transition hover:border-primary/30 hover:bg-primary/5",
+                            "flex w-full items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-3 text-left transition hover:border-primary/30 hover:bg-primary/5",
                             selectedDrilldown?.type === "leak" && selectedDrilldown.key === leak.label && "border-primary/40 bg-primary/5",
                           )}
                         >
                           <span className="text-base text-white">{leak.label}</span>
-                          <span className="font-mono text-sm text-muted-foreground">
-                            {leak.weightedSeverity} severity
-                          </span>
+                          <span className="font-mono text-sm text-muted-foreground">{leak.weightedSeverity} severity</span>
                         </button>
                       ))}
                     </div>
@@ -1196,24 +1249,51 @@ export default function Dashboard() {
                     <p className="mt-3 text-base text-muted-foreground">No recent mistakes found yet.</p>
                   )}
                 </div>
-              </div>
 
-              <div>
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-2xl font-semibold text-white">Grade By Position</h3>
-                    <p className="mt-1 text-base text-muted-foreground">This is the main dashboard view. Click a position to drill into action families and stack buckets.</p>
+                <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm uppercase tracking-wider text-sky-200">Experimental Range Adjustment</p>
+                      <h3 className="mt-2 text-xl font-semibold text-white">BTN RFI {EXPERIMENTAL_RFI_STACK_BUCKET}</h3>
+                    </div>
+                    <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-200">
+                      Experimental
+                    </Badge>
                   </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {dashboardGrades.positions.map((card) => (
-                    <GradeTile
-                      key={card.key}
-                      card={card}
-                      active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
-                      onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
+                  <p className="mt-3 text-sm leading-relaxed text-sky-100">
+                    Adjust this one sample RFI baseline by up to 5 percentage points. Parser and baseline JSON stay unchanged.
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border border-sky-500/20 bg-background/70 p-3">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Current baseline</p>
+                      <p className="mt-1 font-mono text-2xl text-white">{formatOneDecimalPercent(experimentalRfiBasePercent)}</p>
+                    </div>
+                    <div className="rounded-lg border border-sky-500/20 bg-background/70 p-3">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Adjusted baseline</p>
+                      <p className="mt-1 font-mono text-2xl text-white">{formatOneDecimalPercent(experimentalRfiAdjustedPercent)}</p>
+                    </div>
+                    <div className="rounded-lg border border-sky-500/20 bg-background/70 p-3">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Node grade</p>
+                      <p className="mt-1 font-mono text-2xl text-white">{experimentalRfiAdjustedCard?.grade ?? "N/A"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-5">
+                    <div className="mb-3 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">-5%</span>
+                      <span className="font-mono text-sky-100">
+                        Delta {experimentalRfiDelta > 0 ? "+" : ""}
+                        {experimentalRfiDelta.toFixed(1)}%
+                      </span>
+                      <span className="text-muted-foreground">+5%</span>
+                    </div>
+                    <Slider
+                      value={[experimentalRfiDelta]}
+                      min={-5}
+                      max={5}
+                      step={0.1}
+                      onValueChange={(value) => setExperimentalRfiDelta(value[0] ?? 0)}
                     />
-                  ))}
+                  </div>
                 </div>
               </div>
 

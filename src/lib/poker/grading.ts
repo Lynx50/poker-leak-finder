@@ -1,4 +1,5 @@
 import {
+  BaselineFrequencyAdjustment,
   DashboardGradeSummary,
   GradeCard,
   GradeLetter,
@@ -33,6 +34,8 @@ export const DEFAULT_ROLLING_WINDOW_CONFIG = {
 };
 
 type RollingWindowConfig = typeof DEFAULT_ROLLING_WINDOW_CONFIG;
+
+type BaselineFrequencyAdjustments = Record<string, BaselineFrequencyAdjustment>;
 
 export type EligibleDecision = SupportedDecision & {
   gradingEligibility: GradingEligibility;
@@ -254,6 +257,7 @@ function getActionFrequency(
   opportunities: PreflopOpportunity[],
   scoredDecisions: SupportedDecision[],
   action?: GradingActionFamily,
+  baselineAdjustment?: BaselineFrequencyAdjustment,
 ): GradeCard["actionFrequency"] {
   if (!action || action === "Fold" || opportunities.length === 0) return undefined;
 
@@ -264,7 +268,8 @@ function getActionFrequency(
       ? scoredDecisions.filter((decision) => actionMatchesFamily(decision.preferredAction, action)).length
       : null;
   const actualPercent = takenCount / opportunities.length;
-  const baselinePercent = baselineCount !== null ? baselineCount / scoredDecisions.length : null;
+  const baselinePercent =
+    baselineAdjustment?.baselinePercent ?? (baselineCount !== null ? baselineCount / scoredDecisions.length : null);
 
   return {
     action,
@@ -325,6 +330,7 @@ function gradeDecisions(
   opportunities: PreflopOpportunity[],
   config: RollingWindowConfig,
   actionFrequencyFamily?: GradingActionFamily,
+  baselineAdjustment?: BaselineFrequencyAdjustment,
 ): GradeCard {
   const scoredCount = scoredDecisions.length;
   const opportunityCount = opportunities.length;
@@ -334,7 +340,7 @@ function gradeDecisions(
   const mistakeRate = scoredCount > 0 ? mistakeCount / scoredCount : 0;
   const severityRate = scoredCount > 0 ? weightedSeverity / (scoredCount * 3) : 0;
   const confidence = clamp(scoredCount / config.minStableSample, 0, 1);
-  const actionFrequency = getActionFrequency(opportunities, scoredDecisions, actionFrequencyFamily);
+  const actionFrequency = getActionFrequency(opportunities, scoredDecisions, actionFrequencyFamily, baselineAdjustment);
 
   if (scoredCount < config.minProvisionalSample) {
     return {
@@ -355,7 +361,11 @@ function gradeDecisions(
     };
   }
 
-  const rawScore = clamp(100 - mistakeRate * 45 - severityRate * 55, 0, 100);
+  const frequencyPenalty =
+    actionFrequency?.baselinePercent !== null && actionFrequency?.baselinePercent !== undefined
+      ? Math.min(Math.abs(actionFrequency.actualPercent - actionFrequency.baselinePercent) * 120, 20)
+      : 0;
+  const rawScore = clamp(100 - mistakeRate * 45 - severityRate * 55 - frequencyPenalty, 0, 100);
   const status = scoredCount >= config.minStableSample ? "stable" : "provisional";
   const grade = status === "provisional" ? capProvisionalGrade(toGrade(rawScore)) : toGrade(rawScore);
 
@@ -387,6 +397,7 @@ function groupGrade(
     actionFrequencyFamily?: GradingActionFamily;
   }[],
   config: RollingWindowConfig,
+  baselineAdjustments: BaselineFrequencyAdjustments = {},
 ) {
   return entries.map((entry) =>
     gradeDecisions(
@@ -396,6 +407,7 @@ function groupGrade(
       opportunities.filter(entry.predicate),
       config,
       entry.actionFrequencyFamily,
+      baselineAdjustments[entry.key],
     ),
   );
 }
@@ -451,6 +463,7 @@ export function buildDashboardGradeSummary(
   opportunities: PreflopOpportunity[],
   tournamentFormatFilter: TournamentFormatFilter,
   config: RollingWindowConfig = DEFAULT_ROLLING_WINDOW_CONFIG,
+  baselineAdjustments: BaselineFrequencyAdjustments = {},
 ): DashboardGradeSummary {
   const activeDecisions = decisions.slice(-config.recentHandLimit);
   const filteredOpportunities =
@@ -467,6 +480,7 @@ export function buildDashboardGradeSummary(
       predicate: (decision) => decision.heroPosition === position,
     })),
     config,
+    baselineAdjustments,
   );
 
   const actionFamilies = groupGrade(
@@ -479,6 +493,7 @@ export function buildDashboardGradeSummary(
       actionFrequencyFamily: family,
     })),
     config,
+    baselineAdjustments,
   );
 
   const byPositionAction = POSITION_ORDER.reduce<Record<string, GradeCard[]>>((acc, position) => {
@@ -492,6 +507,7 @@ export function buildDashboardGradeSummary(
         actionFrequencyFamily: family,
       })),
       config,
+      baselineAdjustments,
     );
     return acc;
   }, {});
@@ -514,6 +530,7 @@ export function buildDashboardGradeSummary(
           actionFrequencyFamily: family,
         })),
         config,
+        baselineAdjustments,
       );
       return stackAcc;
     }, {});
