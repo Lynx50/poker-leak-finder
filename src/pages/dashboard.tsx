@@ -905,33 +905,33 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-16 selection:bg-primary/30">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+    <div className="min-h-screen bg-background pb-16 text-foreground selection:bg-primary/30">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur-md">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 pr-32">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md border border-primary/20 bg-primary/10">
-              <Search className="h-4 w-4 text-primary" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-primary/30 bg-primary/15">
+              <Search className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-mono text-base font-bold text-white">Poker Leak Finder</p>
-              <p className="text-xs text-muted-foreground">Upload, analyse, filter, export</p>
+              <p className="font-mono text-lg font-bold text-white">Poker Leak Finder</p>
+              <p className="text-sm text-muted-foreground">Upload, grade, and study your next preflop leak</p>
             </div>
           </div>
-          <Badge variant="outline" className="border-primary/30 bg-primary/5 font-mono uppercase tracking-wider text-primary">
-            React Dashboard
+          <Badge variant="outline" className="border-primary/30 bg-primary/10 px-4 py-2 font-mono uppercase tracking-wider text-primary">
+            Preflop Dashboard
           </Badge>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="border-border bg-card">
+      <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8">
+        <section className="order-2 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <Card className="casino-surface border-primary/20 bg-card shadow-2xl shadow-primary/5">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
+              <CardTitle className="flex items-center gap-2 text-2xl text-white">
                 <UploadCloud className="h-5 w-5 text-primary" />
-                Upload And Analyse
+                Upload Hands / Refresh Data
               </CardTitle>
-              <CardDescription>Drag files in, paste histories, then run the preflop range analysis.</CardDescription>
+              <CardDescription className="text-base">Drag files in, paste histories, then run the preflop range analysis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <input ref={fileInputRef} type="file" multiple onChange={handleUpload} className="hidden" />
@@ -948,10 +948,10 @@ export default function Dashboard() {
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+                  "cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors",
                   isDragging
-                    ? "border-primary/60 bg-primary/5"
-                    : "border-border bg-background hover:border-primary/40 hover:bg-muted/30",
+                    ? "border-primary bg-primary/10"
+                    : "border-primary/30 bg-background/70 hover:border-primary/60 hover:bg-muted/30",
                 )}
               >
                 <div className="mx-auto flex max-w-md flex-col items-center gap-3">
@@ -959,8 +959,8 @@ export default function Dashboard() {
                     <UploadCloud className="h-7 w-7 text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-white">Drag and drop hand history files here</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">or click to choose files</p>
+                    <h3 className="text-xl font-semibold text-white">Drag and drop hand history files here</h3>
+                    <p className="mt-2 text-base text-muted-foreground">or click to choose files</p>
                   </div>
                   <p className="font-mono text-xs text-muted-foreground">Supports multiple text hand histories</p>
                 </div>
@@ -986,12 +986,13 @@ export default function Dashboard() {
                 value={handHistoryInput}
                 onChange={(event) => setHandHistoryInput(event.target.value)}
                 placeholder="Paste hand histories here"
-                className="min-h-[220px] resize-y bg-background font-mono text-sm"
+                className="min-h-[220px] resize-y bg-background font-mono text-base leading-7"
               />
 
               <div className="flex flex-wrap gap-3">
-                <Button onClick={runAnalysis} className="font-medium">
-                  Analyse
+                <Button onClick={runAnalysis} size="lg" className="cta-accent px-7 font-semibold shadow-lg shadow-orange-900/20">
+                  <UploadCloud className="mr-2 h-5 w-5" />
+                  Upload Hands / Refresh Data
                 </Button>
                 <Button variant="secondary" onClick={clearFiles}>
                   <XCircle className="mr-2 h-4 w-4" />
@@ -1116,7 +1117,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="space-y-6">
+        <section className="order-1 space-y-6">
           <Card className="border-border bg-card">
             <CardHeader>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1467,7 +1468,7 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section>
+        <section className="order-3">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
@@ -1508,7 +1509,7 @@ export default function Dashboard() {
           </Collapsible>
         </section>
 
-        <section>
+        <section className="order-4">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
@@ -1626,7 +1627,7 @@ export default function Dashboard() {
           </Collapsible>
         </section>
 
-        <section>
+        <section className="order-5">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
@@ -1640,7 +1641,7 @@ export default function Dashboard() {
               </CardHeader>
               <CollapsibleContent>
                 <CardContent className="space-y-6">
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="order-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card className="border-border bg-card">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
@@ -1670,7 +1671,7 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.9fr_0.9fr_1.1fr]">
+        <section className="order-7 grid gap-6 lg:grid-cols-[0.9fr_0.9fr_1.1fr]">
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle className="text-white">Weighted Leak Report</CardTitle>
@@ -1854,7 +1855,7 @@ export default function Dashboard() {
           </Collapsible>
         </section>
 
-        <section>
+        <section className="order-8">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
