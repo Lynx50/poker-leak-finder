@@ -42,11 +42,7 @@ function getEffectiveStackInBlinds(hand: ParsedHand) {
 }
 
 function isVoluntary(action: ParsedAction) {
-  return !["post_sb", "post_bb", "post_ante"].includes(action.type);
-}
-
-function isAggressive(action: ParsedAction) {
-  return action.type === "raise" || action.type === "bet";
+  return ["fold", "check", "call", "bet", "raise"].includes(action.type);
 }
 
 function classifyRaise(action: ParsedAction, allInLabel: string, nonAllInLabel: string) {
