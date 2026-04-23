@@ -258,6 +258,36 @@ function getActionFrequency(
   };
 }
 
+function isHighConfidenceRfiDecision(decision: SupportedDecision) {
+  return (
+    decision.family === "unopened" &&
+    decision.confidenceTier === "clean" &&
+    decision.nodeSupport === "strong" &&
+    !decision.usesFallback
+  );
+}
+
+function getRfiLeakSummary(scoredDecisions: SupportedDecision[]): GradeCard["rfiLeakSummary"] {
+  const highConfidenceRfiDecisions = scoredDecisions.filter(isHighConfidenceRfiDecision);
+  const missedOpens = highConfidenceRfiDecisions.filter(
+    (decision) => decision.actualAction === "Fold" && (decision.preferredAction === "Raise" || decision.preferredAction === "Jam"),
+  ).length;
+  const tooWideOpens = highConfidenceRfiDecisions.filter(
+    (decision) => (decision.actualAction === "Raise" || decision.actualAction === "Jam") && decision.preferredAction === "Fold",
+  ).length;
+
+  return {
+    missedOpens,
+    tooWideOpens,
+    tendency:
+      missedOpens > tooWideOpens
+        ? "Too Tight"
+        : tooWideOpens > missedOpens
+          ? "Too Loose"
+          : "Balanced",
+  };
+}
+
 function formatFrequencyPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
@@ -321,6 +351,7 @@ function gradeDecisions(
     actionFrequencyFamily,
     baselineAdjustment,
   );
+  const rfiLeakSummary = actionFrequencyFamily === "RFI" ? getRfiLeakSummary(scoredDecisions) : undefined;
 
   if (scoredCount < config.minProvisionalSample) {
     return {
@@ -338,6 +369,7 @@ function gradeDecisions(
       confidence,
       studyHint: buildStudyHint(label, scoredDecisions, opportunities, null, actionFrequency),
       actionFrequency,
+      rfiLeakSummary,
     };
   }
 
@@ -364,6 +396,7 @@ function gradeDecisions(
     confidence,
     studyHint: buildStudyHint(label, scoredDecisions, opportunities, rawScore, actionFrequency),
     actionFrequency,
+    rfiLeakSummary,
   };
 }
 

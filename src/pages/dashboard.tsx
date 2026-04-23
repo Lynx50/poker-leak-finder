@@ -233,6 +233,11 @@ function makeEmptyGradeCard(key: string, label: string): GradeCard {
     weightedSeverity: 0,
     confidence: 0,
     studyHint: "No recent opportunities yet.",
+    rfiLeakSummary: {
+      missedOpens: 0,
+      tooWideOpens: 0,
+      tendency: "Balanced",
+    },
   };
 }
 
@@ -303,6 +308,7 @@ function GradeTile({
   const yourPercentLabel = card.actionFrequency
     ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
     : "--";
+  const rfiLeakSummary = card.rfiLeakSummary;
   const sampleLabel =
     card.status === "not_enough_data" ? "Low sample" : card.status === "provisional" ? "Provisional" : null;
 
@@ -338,9 +344,27 @@ function GradeTile({
         ))}
       </div>
 
+      {rfiLeakSummary && (
+        <div className="mt-4 grid gap-3">
+          {[
+            ["Missed Opens", rfiLeakSummary.missedOpens.toLocaleString()],
+            ["Too Wide Opens", rfiLeakSummary.tooWideOpens.toLocaleString()],
+          ].map(([label, value]) => (
+            <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/40 px-4 py-2.5">
+              <span className="text-sm font-medium text-muted-foreground">{label}</span>
+              <span className="font-mono text-xl font-semibold text-white">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mt-4 flex min-h-6 items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>{sampleLabel}</span>
-        {card.mistakeCount > 0 && <span>Mistakes: {card.mistakeCount}</span>}
+        {rfiLeakSummary && (
+          <Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary">
+            {rfiLeakSummary.tendency}
+          </Badge>
+        )}
       </div>
       {mode === "detail" && <Progress value={card.confidence * 100} className="mt-2 h-1.5" />}
     </button>
