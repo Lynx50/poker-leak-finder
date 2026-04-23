@@ -1,6 +1,8 @@
 import { buildPositionMap } from "./parser";
 import {
   BlindVsBlindGradeCard,
+  BlindVsBlindLeakBucket,
+  BlindVsBlindLeakHand,
   BlindVsBlindOpportunity,
   BlindVsBlindPostflopAction,
   BlindVsBlindPostflopRole,
@@ -41,12 +43,32 @@ function getEffectiveStackInBlinds(hand: ParsedHand) {
   return toBlindCount(Math.min(sb.stack, bb.stack), hand.bigBlindAmount);
 }
 
+function getEffectiveStackInChips(hand: ParsedHand) {
+  const sb = getSeatByPosition(hand, "SB");
+  const bb = getSeatByPosition(hand, "BB");
+  if (!sb || !bb) return 0;
+  return Math.min(sb.stack, bb.stack);
+}
+
+function getActorStackInChips(hand: ParsedHand, actorPosition: "SB" | "BB") {
+  return getSeatByPosition(hand, actorPosition)?.stack ?? null;
+}
+
 function isVoluntary(action: ParsedAction) {
   return ["fold", "check", "call", "bet", "raise"].includes(action.type);
 }
 
 function classifyRaise(action: ParsedAction, allInLabel: string, nonAllInLabel: string) {
   return action.isAllIn ? allInLabel : nonAllInLabel;
+}
+
+function summarizeActions(hand: ParsedHand, street?: ParsedStreet) {
+  const actions = street ? hand.postflopActions[street] : hand.preflopActions;
+  const summary = actions
+    .filter(isVoluntary)
+    .map((action) => action.raw)
+    .join(" / ");
+  return summary || "No action summary available";
 }
 
 function makeOpportunity(
@@ -64,6 +86,11 @@ function makeOpportunity(
     actorPosition,
     stackBucket: getStackBucket(effectiveStackInBlinds),
     effectiveStackInBlinds,
+    effectiveStackInChips: getEffectiveStackInChips(hand),
+    actorStackInChips: getActorStackInChips(hand, actorPosition),
+    heroCards: hand.heroCards.shorthand || hand.heroCards.raw || "--",
+    actionSummary: summarizeActions(hand, extra.street),
+    rawHand: hand.raw,
     ...extra,
   };
 }
@@ -240,9 +267,53 @@ function toGrade(leakRate: number): BlindVsBlindGradeCard["grade"] {
   return "F";
 }
 
-function makeGradeCard(key: string, label: string, opportunities: BlindVsBlindOpportunity[], leakPredicate: (opportunity: BlindVsBlindOpportunity) => boolean, note: string): BlindVsBlindGradeCard {
-  const leakCount = opportunities.filter(leakPredicate).length;
+function toLeakHand(opportunity: BlindVsBlindOpportunity): BlindVsBlindLeakHand {
+  return {
+    handId: opportunity.handId,
+    heroCards: opportunity.heroCards,
+    branch: opportunity.branch,
+    action: opportunity.action,
+    actorPosition: opportunity.actorPosition,
+    stackBucket: opportunity.stackBucket,
+    effectiveStackInBlinds: opportunity.effectiveStackInBlinds,
+    effectiveStackInChips: opportunity.effectiveStackInChips,
+    actorStackInChips: opportunity.actorStackInChips,
+    actionSummary: opportunity.actionSummary,
+    rawHand: opportunity.rawHand,
+    potType: opportunity.potType,
+    street: opportunity.street,
+    postflopRole: opportunity.postflopRole,
+  };
+}
+
+function makeLeakBucket(
+  key: string,
+  label: string,
+  opportunities: BlindVsBlindOpportunity[],
+  predicate: ((opportunity: BlindVsBlindOpportunity) => boolean) | null,
+): BlindVsBlindLeakBucket {
+  const matched = predicate ? opportunities.filter(predicate) : [];
+  return {
+    key,
+    label,
+    supported: Boolean(predicate),
+    count: matched.length,
+    hands: matched.map(toLeakHand),
+  };
+}
+
+function makeGradeCard(
+  key: string,
+  label: string,
+  opportunities: BlindVsBlindOpportunity[],
+  actionFrequencyLabel: string,
+  actionFrequencyPredicate: (opportunity: BlindVsBlindOpportunity) => boolean,
+  leakBuckets: BlindVsBlindLeakBucket[],
+  note: string,
+): BlindVsBlindGradeCard {
+  const leakCount = leakBuckets.filter((bucket) => bucket.supported).reduce((sum, bucket) => sum + bucket.count, 0);
   const leakRate = ratio(leakCount, opportunities.length);
+  const takenCount = opportunities.filter(actionFrequencyPredicate).length;
   return {
     key,
     label,
@@ -251,6 +322,13 @@ function makeGradeCard(key: string, label: string, opportunities: BlindVsBlindOp
     leakCount,
     leakRate,
     note,
+    actionFrequency: {
+      label: actionFrequencyLabel,
+      actualPercent: ratio(takenCount, opportunities.length),
+      opportunities: opportunities.length,
+      takenCount,
+    },
+    leakBuckets,
   };
 }
 
@@ -268,15 +346,87 @@ export function buildBlindVsBlindReport(parsedHands: ParsedHand[]): BlindVsBlind
 
   const byBranch = (branch: BlindVsBlindPreflopBranch) => opportunities.filter((opportunity) => opportunity.branch === branch && !opportunity.street);
   const byPot = (potType: BlindVsBlindPotType) => opportunities.filter((opportunity) => opportunity.potType === potType);
-  const jamDecisions = opportunities.filter((opportunity) => /jam/i.test(opportunity.action));
+
+  const sbUnopened = byBranch("sb_unopened");
+  const bbVsSbLimp = byBranch("bb_vs_sb_limp");
+  const sbVsBbIso = byBranch("sb_vs_bb_iso");
+  const limpedPot = byPot("limped_pot");
+  const raisedPostflop = [...byPot("raised_pot"), ...byPot("3bet_pot")];
+  const shortStackJamDecisions = opportunities.filter((o) => o.effectiveStackInBlinds <= 25);
 
   const gradeCards = [
-    makeGradeCard("sb_unopened", "SB unopened strategy", byBranch("sb_unopened"), (o) => o.action === "limp" || o.action === "fold", "Flags possible over-limping and missed first-in aggression."),
-    makeGradeCard("bb_vs_sb_limp", "BB vs SB limp", byBranch("bb_vs_sb_limp"), (o) => o.action === "check", "Flags passive checks when BB may have iso opportunities."),
-    makeGradeCard("sb_vs_bb_iso", "SB vs BB iso", byBranch("sb_vs_bb_iso"), (o) => o.action === "call_vs_iso", "Flags limp/calls and over-continuing versus isolation raises."),
-    makeGradeCard("limped_pot_postflop", "Limped pot postflop", byPot("limped_pot"), (o) => o.action === "check" || o.action === "check_back", "Tracks passive flop-through-river play after SB limp and BB check."),
-    makeGradeCard("raised_pot_postflop", "Raised pot postflop", [...byPot("raised_pot"), ...byPot("3bet_pot")], (o) => o.action === "check" || o.action === "check_back", "Tracks postflop passivity in raised and 3-bet blind battles."),
-    makeGradeCard("jam_decisions", "Jam decisions by stack depth", opportunities.filter((o) => o.effectiveStackInBlinds <= 25), (o) => o.action !== "jam" && !/jam/i.test(o.action), "Highlights low-stack BvB decisions that did not become jams."),
+    makeGradeCard(
+      "sb_unopened",
+      "SB unopened strategy",
+      sbUnopened,
+      "Raise/jam",
+      (o) => o.action === "raise_non_all_in" || o.action === "jam",
+      [
+        makeLeakBucket("passed_up_opens", "Passed Up Opens", sbUnopened, (o) => o.action === "limp" || o.action === "fold"),
+        makeLeakBucket("opened_too_wide", "Opened Too Wide", sbUnopened, null),
+      ],
+      "Flags possible over-limping and missed first-in aggression.",
+    ),
+    makeGradeCard(
+      "bb_vs_sb_limp",
+      "BB vs SB limp",
+      bbVsSbLimp,
+      "Iso raise",
+      (o) => o.action === "raise_non_all_in" || o.action === "jam",
+      [
+        makeLeakBucket("missed_isos", "Missed Isos", bbVsSbLimp, (o) => o.action === "check"),
+        makeLeakBucket("isoed_too_wide", "Isoed Too Wide", bbVsSbLimp, null),
+      ],
+      "Flags passive checks when BB may have iso opportunities.",
+    ),
+    makeGradeCard(
+      "sb_vs_bb_iso",
+      "SB vs BB iso",
+      sbVsBbIso,
+      "Continue",
+      (o) => o.action === "call_vs_iso" || o.action === "limp_jam" || o.action === "limp_reraise_non_all_in",
+      [
+        makeLeakBucket("folded_too_much", "Folded Too Much", sbVsBbIso, (o) => o.action === "fold_vs_iso"),
+        makeLeakBucket("continued_too_wide", "Continued Too Wide", sbVsBbIso, (o) => o.action === "call_vs_iso"),
+      ],
+      "Flags limp/calls and over-continuing versus isolation raises.",
+    ),
+    makeGradeCard(
+      "limped_pot_postflop",
+      "Limped pot postflop",
+      limpedPot,
+      "Bet/raise",
+      (o) => o.action === "bet_small" || o.action === "bet_big" || o.action === "raise" || o.action === "jam",
+      [
+        makeLeakBucket("bet_too_little", "Bet Too Little", limpedPot, (o) => o.action === "check" || o.action === "check_back"),
+        makeLeakBucket("bet_too_often", "Bet Too Often", limpedPot, null),
+      ],
+      "Tracks passive flop-through-river play after SB limp and BB check.",
+    ),
+    makeGradeCard(
+      "raised_pot_postflop",
+      "Raised pot postflop",
+      raisedPostflop,
+      "Bet/raise",
+      (o) => o.action === "bet_small" || o.action === "bet_big" || o.action === "raise" || o.action === "jam",
+      [
+        makeLeakBucket("bet_too_little", "Bet Too Little", raisedPostflop, (o) => o.action === "check" || o.action === "check_back"),
+        makeLeakBucket("bet_too_often", "Bet Too Often", raisedPostflop, null),
+      ],
+      "Tracks postflop passivity in raised and 3-bet blind battles.",
+    ),
+    makeGradeCard(
+      "jam_decisions",
+      "Jam decisions by stack depth",
+      shortStackJamDecisions,
+      "Jam",
+      (o) => /jam/i.test(o.action),
+      [
+        makeLeakBucket("passed_on_jam", "Passed on Jam", shortStackJamDecisions, (o) => !/jam/i.test(o.action)),
+        makeLeakBucket("jammed_too_wide", "Jammed Too Wide", shortStackJamDecisions, null),
+      ],
+      "Highlights low-stack BvB decisions that did not become jams.",
+    ),
   ];
 
   const preflopCounts = Object.entries(

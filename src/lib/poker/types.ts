@@ -443,9 +443,39 @@ export type BlindVsBlindOpportunity = {
   actorPosition: "SB" | "BB";
   stackBucket: BlindVsBlindStackBucket;
   effectiveStackInBlinds: number;
+  effectiveStackInChips: number;
+  actorStackInChips: number | null;
+  heroCards: string;
+  actionSummary: string;
+  rawHand: string;
   potType?: BlindVsBlindPotType;
   street?: ParsedStreet;
   postflopRole?: BlindVsBlindPostflopRole;
+};
+
+export type BlindVsBlindLeakHand = {
+  handId: string;
+  heroCards: string;
+  branch: BlindVsBlindPreflopBranch;
+  action: string;
+  actorPosition: "SB" | "BB";
+  stackBucket: BlindVsBlindStackBucket;
+  effectiveStackInBlinds: number;
+  effectiveStackInChips: number;
+  actorStackInChips: number | null;
+  actionSummary: string;
+  rawHand: string;
+  potType?: BlindVsBlindPotType;
+  street?: ParsedStreet;
+  postflopRole?: BlindVsBlindPostflopRole;
+};
+
+export type BlindVsBlindLeakBucket = {
+  key: string;
+  label: string;
+  supported: boolean;
+  count: number;
+  hands: BlindVsBlindLeakHand[];
 };
 
 export type BlindVsBlindGradeCard = {
@@ -456,6 +486,13 @@ export type BlindVsBlindGradeCard = {
   leakCount: number;
   leakRate: number;
   note: string;
+  actionFrequency?: {
+    label: string;
+    actualPercent: number;
+    opportunities: number;
+    takenCount: number;
+  };
+  leakBuckets: BlindVsBlindLeakBucket[];
 };
 
 export type BlindVsBlindStackSummary = {

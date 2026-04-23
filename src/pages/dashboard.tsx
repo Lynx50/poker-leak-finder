@@ -18,8 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
@@ -38,7 +40,7 @@ import {
 import { createImportedRangeState, createManualRangeState, getDefaultRangeLibraryState, loadRangeLibraryState, saveRangeLibraryState } from "@/lib/poker/range-store";
 import { BUILT_IN_RANGE_PACK, exportRangePack, formatRangeTokens, getEffectiveRangeNodes, parseRangeText, validateRangePack } from "@/lib/poker/ranges";
 import { STACK_DEPTH_BUCKETS } from "@/lib/poker/stack-depth";
-import { AnalysisReport, GradeCard, GradingActionFamily, GradingEligibility, Position, PreflopRangeNode, RangeAction, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
+import { AnalysisReport, BlindVsBlindGradeCard, BlindVsBlindLeakBucket, BlindVsBlindLeakHand, GradeCard, GradingActionFamily, GradingEligibility, Position, PreflopRangeNode, RangeAction, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
 import { cn } from "@/lib/utils";
 
 type AnalysisResult = {
@@ -78,6 +80,11 @@ type DrilldownSelection =
   | { type: "position"; key: Position; action?: GradingActionFamily }
   | { type: "action"; key: GradingActionFamily }
   | { type: "leak"; key: string };
+
+type SelectedBlindVsBlindLeak = {
+  cardLabel: string;
+  bucket: BlindVsBlindLeakBucket;
+};
 
 type StoredUploadBatch = {
   id: string;
@@ -261,6 +268,22 @@ function getBlindVsBlindBaselineTarget(
   }
 }
 
+function getBlindVsBlindGradeTone(card: BlindVsBlindGradeCard) {
+  if (card.grade === "N/A") return "border-slate-500/30 bg-slate-500/10 text-slate-300";
+  if (card.grade === "A+" || card.grade === "A" || card.grade === "A-") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (card.grade === "B+" || card.grade === "B" || card.grade === "B-") return "border-lime-500/30 bg-lime-500/10 text-lime-300";
+  if (card.grade === "C+" || card.grade === "C" || card.grade === "C-") return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+  return "border-orange-500/30 bg-orange-500/10 text-orange-300";
+}
+
+function formatStackInBigBlinds(value: number) {
+  return value > 0 ? `${value.toFixed(1)}bb` : "--";
+}
+
+function formatChipCount(value: number | null) {
+  return value === null ? "--" : value.toLocaleString();
+}
+
 function getBaselineLabelOverride(filter: TournamentFormatFilter) {
   return filter === "pko" || filter === "mystery_bounty" ? "Pending" : undefined;
 }
@@ -373,6 +396,119 @@ function GradeTile({
   );
 }
 
+function BlindVsBlindTile({
+  card,
+  targetLabel,
+  onLeakClick,
+}: {
+  card: BlindVsBlindGradeCard;
+  targetLabel: string;
+  onLeakClick: (bucket: BlindVsBlindLeakBucket) => void;
+}) {
+  const yourPercentLabel = card.actionFrequency && card.actionFrequency.opportunities > 0
+    ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
+    : "--";
+
+  return (
+    <div className="rounded-2xl border border-border bg-background p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xl font-semibold leading-tight text-white">{card.label}</p>
+          {card.actionFrequency && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your % = {card.actionFrequency.label} frequency in this BvB branch.
+            </p>
+          )}
+        </div>
+        <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", getBlindVsBlindGradeTone(card))}>
+          {card.grade}
+        </Badge>
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        {[
+          ["Hands", card.opportunities.toLocaleString()],
+          ["Target", targetLabel],
+          ["Your %", yourPercentLabel],
+        ].map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
+            <span className="text-base font-medium text-muted-foreground">{label}</span>
+            <span className="font-mono text-2xl font-semibold text-white">{value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {card.leakBuckets.map((bucket) => {
+          const isClickable = bucket.supported && bucket.count > 0;
+          return (
+            <button
+              key={bucket.key}
+              type="button"
+              disabled={!isClickable}
+              onClick={() => onLeakClick(bucket)}
+              className={cn(
+                "grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/40 px-4 py-2.5 text-left transition",
+                isClickable ? "hover:border-primary/50 hover:bg-primary/10" : "cursor-default opacity-70",
+              )}
+            >
+              <span className="text-sm font-medium text-muted-foreground">{bucket.label}</span>
+              <span className="font-mono text-xl font-semibold text-white">
+                {bucket.supported ? bucket.count.toLocaleString() : "--"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BlindVsBlindLeakHandCard({ hand }: { hand: BlindVsBlindLeakHand }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-mono text-lg font-semibold text-white">{hand.heroCards}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {hand.actorPosition} / {hand.branch} / {hand.action}
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit border-primary/30 bg-primary/10 text-primary">
+          {hand.stackBucket}
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-background px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Actor Stack</p>
+          <p className="mt-1 font-mono text-base text-white">{formatChipCount(hand.actorStackInChips)}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-background px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Effective Stack</p>
+          <p className="mt-1 font-mono text-base text-white">{formatChipCount(hand.effectiveStackInChips)}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-background px-3 py-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Effective BB</p>
+          <p className="mt-1 font-mono text-base text-white">{formatStackInBigBlinds(hand.effectiveStackInBlinds)}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Action Summary</p>
+        <p className="mt-1 text-sm leading-relaxed text-white">{hand.actionSummary}</p>
+      </div>
+
+      <details className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
+        <summary className="cursor-pointer text-sm font-medium text-muted-foreground">Raw hand history</summary>
+        <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-xs leading-relaxed text-slate-200">
+          {hand.rawHand}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rangeImportRef = useRef<HTMLInputElement | null>(null);
@@ -391,6 +527,7 @@ export default function Dashboard() {
   const [invalidRangeMessage, setInvalidRangeMessage] = useState<string | null>(null);
   const [tournamentFormatFilter, setTournamentFormatFilter] = useState<TournamentFormatFilter>("all_tournaments");
   const [selectedDrilldown, setSelectedDrilldown] = useState<DrilldownSelection | null>(null);
+  const [selectedBlindVsBlindLeak, setSelectedBlindVsBlindLeak] = useState<SelectedBlindVsBlindLeak | null>(null);
   const [storedUploadBatches, setStoredUploadBatches] = useState<StoredUploadBatch[]>([]);
   const [experimentalRfiDelta, setExperimentalRfiDelta] = useState(0);
 
@@ -1533,36 +1670,18 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {(report?.blindVsBlind.gradeCards ?? []).map((card) => (
-                    <div key={card.key} className="rounded-2xl border border-border bg-background p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-xl font-semibold leading-tight text-white">{card.label}</p>
-                        <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", card.grade === "N/A" ? "border-slate-500/30 bg-slate-500/10 text-slate-300" : "border-primary/30 bg-primary/10 text-primary")}>
-                          {card.grade}
-                        </Badge>
-                      </div>
-                      <div className="mt-5 grid gap-3">
-                        {[
-                          ["Hands", card.opportunities.toLocaleString()],
-                          [
-                            "Baseline",
-                            (() => {
-                              if (baselineLabelOverride) return baselineLabelOverride;
-                              const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
-                              return target !== null ? formatOneDecimalPercent(target) : "--";
-                            })(),
-                          ],
-                          ["Your %", "--"],
-                        ].map(([label, value]) => (
-                          <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
-                            <span className="text-base font-medium text-muted-foreground">{label}</span>
-                            <span className="font-mono text-2xl font-semibold text-white">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mt-4 text-sm text-muted-foreground">Mistakes: {card.leakCount}</p>
-                    </div>
-                  ))}
+                  {(report?.blindVsBlind.gradeCards ?? []).map((card) => {
+                    const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
+                    const targetLabel = baselineLabelOverride ?? (target !== null ? formatOneDecimalPercent(target) : "--");
+                    return (
+                      <BlindVsBlindTile
+                        key={card.key}
+                        card={card}
+                        targetLabel={targetLabel}
+                        onLeakClick={(bucket) => setSelectedBlindVsBlindLeak({ cardLabel: card.label, bucket })}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -2385,6 +2504,36 @@ export default function Dashboard() {
           </Collapsible>
         </section>
       </main>
+
+      <Dialog open={Boolean(selectedBlindVsBlindLeak)} onOpenChange={(open) => !open && setSelectedBlindVsBlindLeak(null)}>
+        <DialogContent className="max-h-[90vh] max-w-4xl border-border bg-background">
+          <DialogHeader>
+            <DialogTitle className="text-2xl text-white">
+              {selectedBlindVsBlindLeak
+                ? `${selectedBlindVsBlindLeak.bucket.label} - ${selectedBlindVsBlindLeak.bucket.count.toLocaleString()} hands`
+                : "Blind vs blind leak hands"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedBlindVsBlindLeak
+                ? `${selectedBlindVsBlindLeak.cardLabel}. These are the real classified hands behind this leak counter.`
+                : "Select a blind-vs-blind leak counter to view the underlying hands."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[68vh] pr-4">
+            <div className="space-y-4">
+              {(selectedBlindVsBlindLeak?.bucket.hands ?? []).map((hand, index) => (
+                <BlindVsBlindLeakHandCard key={`${hand.handId}-${hand.branch}-${hand.action}-${hand.street ?? "preflop"}-${index}`} hand={hand} />
+              ))}
+              {selectedBlindVsBlindLeak && selectedBlindVsBlindLeak.bucket.hands.length === 0 && (
+                <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
+                  No backing hands are available for this leak bucket. Unsupported buckets intentionally show a placeholder instead of fake hand data.
+                </p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
