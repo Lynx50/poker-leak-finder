@@ -23,6 +23,7 @@ import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
+import { getBaselineTargetPercent } from "@/lib/poker/baseline-targets";
 import {
   buildDashboardGradeSummary,
   classifyDecisionsForGrading,
@@ -234,6 +235,24 @@ function makeEmptyGradeCard(key: string, label: string): GradeCard {
   };
 }
 
+function getBlindVsBlindBaselineTarget(
+  cardKey: string,
+  resolveBaseline: (cardKey: string) => number | null,
+) {
+  switch (cardKey) {
+    case "sb_unopened":
+      return resolveBaseline("SB:RFI");
+    case "bb_vs_sb_limp":
+      return resolveBaseline("BB:3-bet");
+    case "sb_vs_bb_iso":
+      return resolveBaseline("SB:Call");
+    case "jam_decisions":
+      return resolveBaseline("Jam");
+    default:
+      return null;
+  }
+}
+
 function readStoredUploadBatches(): StoredUploadBatch[] {
   try {
     const raw = window.localStorage.getItem(UPLOAD_HISTORY_KEY);
@@ -252,17 +271,20 @@ function writeStoredUploadBatch(batch: StoredUploadBatch) {
 
 function GradeTile({
   card,
+  baselineTarget,
   onClick,
   active,
   mode = "summary",
 }: {
   card: GradeCard;
+  baselineTarget?: number | null;
   onClick?: () => void;
   active?: boolean;
   mode?: "summary" | "detail";
 }) {
-  const baselineLabel = card.actionFrequency?.baselinePercent !== null && card.actionFrequency?.baselinePercent !== undefined
-    ? formatOneDecimalPercent(card.actionFrequency.baselinePercent)
+  const resolvedBaseline = card.actionFrequency?.baselinePercent ?? baselineTarget ?? null;
+  const baselineLabel = resolvedBaseline !== null
+    ? formatOneDecimalPercent(resolvedBaseline)
     : "--";
   const yourPercentLabel = card.actionFrequency
     ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
@@ -330,6 +352,10 @@ export default function Dashboard() {
   const [experimentalRfiDelta, setExperimentalRfiDelta] = useState(0);
 
   const effectiveRangeNodes = useMemo(() => getEffectiveRangeNodes(rangeLibrary), [rangeLibrary]);
+  const getCardBaselineTarget = useMemo(
+    () => (cardKey: string) => getBaselineTargetPercent(cardKey, effectiveRangeNodes),
+    [effectiveRangeNodes],
+  );
   const editableNodeKeys = useMemo(() => Object.keys(effectiveRangeNodes).sort(), [effectiveRangeNodes]);
   const selectedRangeNode = selectedRangeNodeKey ? effectiveRangeNodes[selectedRangeNodeKey] : undefined;
 
@@ -1140,6 +1166,7 @@ export default function Dashboard() {
                     <GradeTile
                       key={card.key}
                       card={card}
+                      baselineTarget={getCardBaselineTarget(card.key)}
                       active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
                       onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
                     />
@@ -1296,6 +1323,7 @@ export default function Dashboard() {
                     <GradeTile
                       key={card.key}
                       card={card}
+                      baselineTarget={getCardBaselineTarget(card.key)}
                       mode="detail"
                       active={
                         selectedDrilldown.type === "position" &&
@@ -1411,7 +1439,7 @@ export default function Dashboard() {
                           <div key={stackBucket} className="rounded-lg border border-border bg-card p-4">
                             <p className="font-mono text-sm text-white">{stackBucket}</p>
                             <div className="mt-3">
-                              <GradeTile key={card.key} card={card} mode="detail" />
+                              <GradeTile key={card.key} card={card} baselineTarget={getCardBaselineTarget(card.key)} mode="detail" />
                             </div>
                           </div>
                         ))}
@@ -1457,7 +1485,13 @@ export default function Dashboard() {
                     <div className="mt-5 grid gap-3">
                       {[
                         ["Hands", card.opportunities.toLocaleString()],
-                        ["Baseline", "--"],
+                        [
+                          "Baseline",
+                          (() => {
+                            const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
+                            return target !== null ? formatOneDecimalPercent(target) : "--";
+                          })(),
+                        ],
                         ["Your %", "--"],
                       ].map(([label, value]) => (
                         <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">

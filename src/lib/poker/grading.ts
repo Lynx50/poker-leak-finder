@@ -254,6 +254,10 @@ function getActionTakenLabel(action: GradingActionFamily) {
   }
 }
 
+function getPrimaryPositionFrequencyFamily(position: Position): GradingActionFamily {
+  return position === "BB" ? "Call" : "RFI";
+}
+
 function getActionFrequency(
   opportunities: PreflopOpportunity[],
   scoredDecisions: SupportedDecision[],
@@ -332,6 +336,8 @@ function gradeDecisions(
   config: RollingWindowConfig,
   actionFrequencyFamily?: GradingActionFamily,
   baselineAdjustment?: BaselineFrequencyAdjustment,
+  actionFrequencyOpportunities: PreflopOpportunity[] = opportunities,
+  actionFrequencyScoredDecisions: SupportedDecision[] = scoredDecisions,
 ): GradeCard {
   const scoredCount = scoredDecisions.length;
   const opportunityCount = opportunities.length;
@@ -341,7 +347,12 @@ function gradeDecisions(
   const mistakeRate = scoredCount > 0 ? mistakeCount / scoredCount : 0;
   const severityRate = scoredCount > 0 ? weightedSeverity / (scoredCount * 3) : 0;
   const confidence = clamp(scoredCount / config.minStableSample, 0, 1);
-  const actionFrequency = getActionFrequency(opportunities, scoredDecisions, actionFrequencyFamily, baselineAdjustment);
+  const actionFrequency = getActionFrequency(
+    actionFrequencyOpportunities,
+    actionFrequencyScoredDecisions,
+    actionFrequencyFamily,
+    baselineAdjustment,
+  );
 
   if (scoredCount < config.minProvisionalSample) {
     return {
@@ -396,21 +407,28 @@ function groupGrade(
     label: string;
     predicate: (decision: OpportunityLike) => boolean;
     actionFrequencyFamily?: GradingActionFamily;
+    actionFrequencyPredicate?: (decision: OpportunityLike) => boolean;
   }[],
   config: RollingWindowConfig,
   baselineAdjustments: BaselineFrequencyAdjustments = {},
 ) {
-  return entries.map((entry) =>
-    gradeDecisions(
+  return entries.map((entry) => {
+    const scoredForGrade = scoredDecisions.filter(entry.predicate);
+    const opportunitiesForGrade = opportunities.filter(entry.predicate);
+    const frequencyPredicate = entry.actionFrequencyPredicate ?? entry.predicate;
+
+    return gradeDecisions(
       entry.label,
       entry.key,
-      scoredDecisions.filter(entry.predicate),
-      opportunities.filter(entry.predicate),
+      scoredForGrade,
+      opportunitiesForGrade,
       config,
       entry.actionFrequencyFamily,
       baselineAdjustments[entry.key],
-    ),
-  );
+      opportunities.filter(frequencyPredicate),
+      scoredDecisions.filter(frequencyPredicate),
+    );
+  });
 }
 
 function getBiggestLeaks(decisions: SupportedDecision[]) {
@@ -466,7 +484,11 @@ export function buildDashboardGradeSummary(
   config: RollingWindowConfig = DEFAULT_ROLLING_WINDOW_CONFIG,
   baselineAdjustments: BaselineFrequencyAdjustments = {},
 ): DashboardGradeSummary {
-  const activeDecisions = decisions.slice(-config.recentHandLimit);
+  const filteredDecisions =
+    tournamentFormatFilter === "all_tournaments"
+      ? decisions
+      : decisions.filter((decision) => (decision.tournamentType ?? "standard_mtt") === tournamentFormatFilter);
+  const activeDecisions = filteredDecisions.slice(-config.recentHandLimit);
   const filteredOpportunities =
     tournamentFormatFilter === "all_tournaments"
       ? opportunities
@@ -479,6 +501,9 @@ export function buildDashboardGradeSummary(
       key: position,
       label: getPositionLabel(position),
       predicate: (decision) => decision.heroPosition === position,
+      actionFrequencyFamily: getPrimaryPositionFrequencyFamily(position),
+      actionFrequencyPredicate: (decision) =>
+        decision.heroPosition === position && isActionOpportunity(decision, getPrimaryPositionFrequencyFamily(position)),
     })),
     config,
     baselineAdjustments,
@@ -556,7 +581,7 @@ export function buildDashboardGradeSummary(
     studyRecommendation: getStudyRecommendation(recommendationPool),
     rollingWindow: {
       activeDecisionCount: activeDecisions.length,
-      totalDecisionCount: decisions.length,
+      totalDecisionCount: filteredDecisions.length,
       recentHandLimit: config.recentHandLimit,
       minStableSample: config.minStableSample,
       minProvisionalSample: config.minProvisionalSample,
