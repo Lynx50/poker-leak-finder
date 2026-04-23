@@ -107,6 +107,7 @@ export type ParsedHand = {
   raw: string;
   heroName: string;
   heroCards: HeroCards;
+  tournamentType: TournamentType;
   seats: PlayerSeat[];
   buttonSeat: number | null;
   activePlayers: string[];

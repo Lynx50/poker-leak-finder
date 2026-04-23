@@ -214,7 +214,7 @@ function buildOpportunity(
     handId: hand.id,
     nodeKey,
     fallbackNodeKeys: [...fallbackNodeKeys, ...extraFallbackNodeKeys],
-    tournamentType: undefined,
+    tournamentType: hand.tournamentType,
     family,
     heroCards: hand.heroCards.shorthand,
     heroPosition: hand.heroPosition,

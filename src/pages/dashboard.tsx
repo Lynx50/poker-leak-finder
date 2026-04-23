@@ -253,6 +253,10 @@ function getBlindVsBlindBaselineTarget(
   }
 }
 
+function getBaselineLabelOverride(filter: TournamentFormatFilter) {
+  return filter === "pko" || filter === "mystery_bounty" ? "Pending" : undefined;
+}
+
 function readStoredUploadBatches(): StoredUploadBatch[] {
   try {
     const raw = window.localStorage.getItem(UPLOAD_HISTORY_KEY);
@@ -272,20 +276,22 @@ function writeStoredUploadBatch(batch: StoredUploadBatch) {
 function GradeTile({
   card,
   baselineTarget,
+  baselineLabelOverride,
   onClick,
   active,
   mode = "summary",
 }: {
   card: GradeCard;
   baselineTarget?: number | null;
+  baselineLabelOverride?: string;
   onClick?: () => void;
   active?: boolean;
   mode?: "summary" | "detail";
 }) {
   const resolvedBaseline = card.actionFrequency?.baselinePercent ?? baselineTarget ?? null;
-  const baselineLabel = resolvedBaseline !== null
+  const baselineLabel = baselineLabelOverride ?? (resolvedBaseline !== null
     ? formatOneDecimalPercent(resolvedBaseline)
-    : "--";
+    : "--");
   const yourPercentLabel = card.actionFrequency
     ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
     : "--";
@@ -351,6 +357,7 @@ export default function Dashboard() {
   const [storedUploadBatches, setStoredUploadBatches] = useState<StoredUploadBatch[]>([]);
   const [experimentalRfiDelta, setExperimentalRfiDelta] = useState(0);
 
+  const baselineLabelOverride = getBaselineLabelOverride(tournamentFormatFilter);
   const effectiveRangeNodes = useMemo(() => getEffectiveRangeNodes(rangeLibrary), [rangeLibrary]);
   const getCardBaselineTarget = useMemo(
     () => (cardKey: string) => getBaselineTargetPercent(cardKey, effectiveRangeNodes),
@@ -691,22 +698,11 @@ export default function Dashboard() {
     };
     writeStoredUploadBatch(uploadBatch);
     setStoredUploadBatches(readStoredUploadBatches());
-    const annotatedReport: AnalysisReport = {
-      ...nextReport,
-      opportunities: nextReport.opportunities.map((opportunity) => ({
-        ...opportunity,
-        tournamentType: tournamentFormatFilter === "all_tournaments" ? "standard_mtt" : tournamentFormatFilter,
-      })),
-      supported: nextReport.supported.map((decision) => ({
-        ...decision,
-        tournamentType: tournamentFormatFilter === "all_tournaments" ? "standard_mtt" : tournamentFormatFilter,
-      })),
-    };
-    const nextEligibility = classifyDecisionsForGrading(annotatedReport.supported, tournamentFormatFilter);
-    setReport(annotatedReport);
+    const nextEligibility = classifyDecisionsForGrading(nextReport.supported, tournamentFormatFilter);
+    setReport(nextReport);
     setExpandedResults({});
     setResults(
-      annotatedReport.supported.map((decision) => ({
+      nextReport.supported.map((decision) => ({
         id: decision.handId,
         nodeKey: decision.nodeKey,
         heroCards: decision.heroCards,
@@ -1167,6 +1163,7 @@ export default function Dashboard() {
                       key={card.key}
                       card={card}
                       baselineTarget={getCardBaselineTarget(card.key)}
+                      baselineLabelOverride={baselineLabelOverride}
                       active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
                       onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
                     />
@@ -1324,6 +1321,7 @@ export default function Dashboard() {
                       key={card.key}
                       card={card}
                       baselineTarget={getCardBaselineTarget(card.key)}
+                      baselineLabelOverride={baselineLabelOverride}
                       mode="detail"
                       active={
                         selectedDrilldown.type === "position" &&
@@ -1439,7 +1437,13 @@ export default function Dashboard() {
                           <div key={stackBucket} className="rounded-lg border border-border bg-card p-4">
                             <p className="font-mono text-sm text-white">{stackBucket}</p>
                             <div className="mt-3">
-                              <GradeTile key={card.key} card={card} baselineTarget={getCardBaselineTarget(card.key)} mode="detail" />
+                              <GradeTile
+                                key={card.key}
+                                card={card}
+                                baselineTarget={getCardBaselineTarget(card.key)}
+                                baselineLabelOverride={baselineLabelOverride}
+                                mode="detail"
+                              />
                             </div>
                           </div>
                         ))}
@@ -1488,6 +1492,7 @@ export default function Dashboard() {
                         [
                           "Baseline",
                           (() => {
+                            if (baselineLabelOverride) return baselineLabelOverride;
                             const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
                             return target !== null ? formatOneDecimalPercent(target) : "--";
                           })(),

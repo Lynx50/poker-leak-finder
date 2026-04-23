@@ -1,5 +1,5 @@
 import { parseHeroCards } from "./cards";
-import { ParsedAction, ParsedActionType, ParsedHand, ParsedStreet, ParsedStreetActions, PlayerSeat, Position } from "./types";
+import { ParsedAction, ParsedActionType, ParsedHand, ParsedStreet, ParsedStreetActions, PlayerSeat, Position, TournamentType } from "./types";
 
 const HAND_START = /(?=PokerStars Hand #)/g;
 const ACTION_REGEX = /^([^:]+): (.*)$/;
@@ -19,6 +19,24 @@ function parseMoney(value: string | undefined) {
   const normalized = value.replace(/[$,]/g, "");
   const amount = Number(normalized);
   return Number.isFinite(amount) ? amount : undefined;
+}
+
+function detectTournamentType(rawHand: string): TournamentType {
+  const header = rawHand.split(/\r?\n/).slice(0, 8).join(" ");
+
+  if (/mystery\s+bounty|mystery\s+ko|mystery\s+knockout/i.test(header)) {
+    return "mystery_bounty";
+  }
+
+  if (/\b(pko|progressive\s+(ko|knockout)|knockout|bounty)\b/i.test(header)) {
+    return "pko";
+  }
+
+  if (/Tournament\s+#/i.test(header) && /(?:[$€£]?\d+(?:\.\d+)?\+){2}[$€£]?\d+(?:\.\d+)?/i.test(header)) {
+    return "pko";
+  }
+
+  return "standard_mtt";
 }
 
 export function parseActionLine(line: string): ParsedAction | null {
@@ -153,6 +171,7 @@ export function parseHand(rawHand: string): ParsedHand | null {
 
   const heroName = heroCardsMatch[1].trim();
   const heroCards = parseHeroCards(heroCardsMatch[2], heroCardsMatch[3]);
+  const tournamentType = detectTournamentType(rawHand);
 
   const seats = [...rawHand.matchAll(/^Seat (\d+): (.+?) \(\$?([\d,.]+) in chips\)$/gim)].map(
     (match) =>
@@ -185,6 +204,7 @@ export function parseHand(rawHand: string): ParsedHand | null {
     raw: rawHand,
     heroName,
     heroCards,
+    tournamentType,
     seats,
     buttonSeat,
     activePlayers,

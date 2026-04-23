@@ -53,6 +53,9 @@ export type GradingEligibilitySummary = {
   }[];
 };
 
+const BOUNTY_BASELINE_PENDING_MESSAGE =
+  "Visible for volume and frequency tracking, but excluded from grade scoring because a format-specific bounty baseline is not available yet.";
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -81,51 +84,16 @@ export function getGradingEligibility(
     return { status: "scored" };
   }
 
-  const branch = decision.branchSummary.toLowerCase();
-  const isJamDecision =
-    decision.actualAction === "Jam" ||
-    decision.preferredAction === "Jam" ||
-    decision.mistakeType === "under_jam" ||
-    decision.mistakeType === "over_jam" ||
-    branch.includes("jam");
-
-  if (isJamDecision) {
-    return {
-      status: "visible_unscored",
-      reason: "bounty_all_in_spot",
-      message:
-        "Excluded from grade scoring because bounty formats can materially change jam/fold and all-in decisions.",
-    };
-  }
-
-  if (decision.family === "facing_4bet") {
-    return {
-      status: "visible_unscored",
-      reason: "bounty_reshove_or_calloff",
-      message:
-        "Excluded from grade scoring because 4-bet continue/call-off spots are bounty-sensitive without a bounty model.",
-    };
-  }
-
-  if (decision.heroStackInBlinds > 0 && decision.heroStackInBlinds <= 25) {
-    return {
-      status: "visible_unscored",
-      reason: "bounty_short_stack_spot",
-      message:
-        "Excluded from grade scoring because short-stack bounty spots need explicit bounty-aware baselines.",
-    };
-  }
-
-  if (tournamentType === "mystery_bounty" && branch.includes("bounty")) {
-    return {
-      status: "visible_unscored",
-      reason: "mystery_bounty_active_stage",
-      message:
-        "Excluded from grade scoring because active mystery bounty value is not modeled yet.",
-    };
-  }
-
-  return { status: "scored" };
+  return {
+    status: "visible_unscored",
+    reason:
+      tournamentType === "mystery_bounty"
+        ? "mystery_bounty_active_stage"
+        : decision.heroStackInBlinds > 0 && decision.heroStackInBlinds <= 25
+          ? "bounty_short_stack_spot"
+          : "bounty_all_in_spot",
+    message: BOUNTY_BASELINE_PENDING_MESSAGE,
+  };
 }
 
 export function classifyDecisionsForGrading(
@@ -594,7 +562,9 @@ export function buildDashboardGradeSummary(
           ? "Combined results, scored with standard baseline fallback"
           : tournamentFormatFilter === "standard_mtt"
             ? "Using standard chip EV baseline"
-            : "Using standard baseline for this tournament type",
+            : tournamentFormatFilter === "pko"
+              ? "No PKO baseline yet"
+              : "No Mystery Bounty baseline yet",
       usesFallbackBaseline: tournamentFormatFilter !== "standard_mtt",
     },
   };
