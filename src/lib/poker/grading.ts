@@ -234,6 +234,7 @@ export function getDecisionOpportunityActions(decisions: OpportunityLike[]) {
 }
 
 function actionMatchesFamily(action: string, family: GradingActionFamily) {
+  if (family === "Fold") return action === "Fold";
   if (family === "RFI" || family === "3-bet") return action === "Raise" || action === "Jam";
   return action === family;
 }
@@ -259,7 +260,7 @@ function getActionFrequency(
   action?: GradingActionFamily,
   baselineAdjustment?: BaselineFrequencyAdjustment,
 ): GradeCard["actionFrequency"] {
-  if (!action || action === "Fold" || opportunities.length === 0) return undefined;
+  if (!action || opportunities.length === 0) return undefined;
 
   const takenCount = opportunities.filter((decision) => actionMatchesFamily(decision.actualAction, action)).length;
   const foldedCount = opportunities.filter((decision) => decision.actualAction === "Fold").length;

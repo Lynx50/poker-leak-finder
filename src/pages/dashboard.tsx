@@ -261,88 +261,49 @@ function GradeTile({
   active?: boolean;
   mode?: "summary" | "detail";
 }) {
+  const baselineLabel = card.actionFrequency?.baselinePercent !== null && card.actionFrequency?.baselinePercent !== undefined
+    ? formatOneDecimalPercent(card.actionFrequency.baselinePercent)
+    : "--";
+  const yourPercentLabel = card.actionFrequency
+    ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
+    : "--";
+  const sampleLabel =
+    card.status === "not_enough_data" ? "Low sample" : card.status === "provisional" ? "Provisional" : null;
+
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-2xl border bg-background p-6 text-left transition hover:border-primary/40 hover:bg-muted/30",
-        active ? "border-primary/50 bg-primary/5" : "border-border",
+        "rounded-2xl border bg-background p-5 text-left transition hover:border-primary/50 hover:bg-muted/30",
+        active ? "border-primary/60 bg-primary/10 shadow-lg shadow-primary/5" : "border-border",
       )}
     >
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xl font-semibold leading-tight text-white">{card.label}</p>
-          <p className="mt-2 text-base leading-relaxed text-muted-foreground">Full sample plus rolling-grade signal</p>
-        </div>
-        <Badge variant="outline" className={cn("border px-4 py-1.5 font-mono text-xl", getGradeTone(card))}>
+        <p className="min-w-0 font-mono text-xl font-semibold leading-tight text-white">{card.label}</p>
+        <Badge variant="outline" className={cn("shrink-0 border px-3 py-1 font-mono text-xl", getGradeTone(card))}>
           {card.grade}
         </Badge>
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-4 text-base">
-        <div>
-          <p className="text-muted-foreground">Opportunities</p>
-          <p className="mt-1 font-mono text-2xl text-white">{card.opportunityCount}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Scored</p>
-          <p className="mt-1 font-mono text-2xl text-white">{card.scoredCount}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Mistakes</p>
-          <p className="mt-1 font-mono text-2xl text-white">{card.mistakeCount}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Mistake rate</p>
-          <p className="mt-1 font-mono text-2xl text-white">{formatPercent(card.mistakeRate)}</p>
-        </div>
-      </div>
-      <div className="mt-5 text-base text-muted-foreground">
-        {card.status === "stable" ? "Reliable sample" : card.status === "provisional" ? "Provisional sample" : "Needs more scored spots"}
-      </div>
-      {card.actionFrequency && (
-        <div className="mt-4 rounded-lg border border-border bg-card/60 px-4 py-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{card.actionFrequency.action} %</span>
-            <span className="font-mono text-lg text-white">{formatOneDecimalPercent(card.actionFrequency.actualPercent)}</span>
+
+      <div className="mt-5 grid gap-3">
+        {[
+          ["Hands", card.opportunityCount.toLocaleString()],
+          ["Baseline", baselineLabel],
+          ["Your %", yourPercentLabel],
+        ].map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
+            <span className="text-base font-medium text-muted-foreground">{label}</span>
+            <span className="font-mono text-2xl font-semibold text-white">{value}</span>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">Full uploaded sample</p>
-          {mode === "detail" && (
-            <>
-              <div className="mt-2 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{card.actionFrequency.actionTakenLabel}</span>
-                <span className="font-mono text-white">
-                  {card.actionFrequency.takenCount}/{card.actionFrequency.opportunities}
-                </span>
-              </div>
-              {card.actionFrequency.foldedCount > 0 && (
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Folded</span>
-                  <span className="font-mono text-muted-foreground">{card.actionFrequency.foldedCount}</span>
-                </div>
-              )}
-              {card.actionFrequency.otherCount > 0 && (
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Other action</span>
-                  <span className="font-mono text-muted-foreground">{card.actionFrequency.otherCount}</span>
-                </div>
-              )}
-              {card.actionFrequency.baselinePercent !== null && (
-                <div className="mt-2 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Baseline from scored spots</span>
-                  <span className="font-mono text-muted-foreground">
-                    {formatOneDecimalPercent(card.actionFrequency.baselinePercent)}
-                    {card.actionFrequency.differencePercent !== null
-                      ? ` (${formatSignedPercent(card.actionFrequency.differencePercent)})`
-                      : ""}
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      {mode === "detail" && <Progress value={card.confidence * 100} className="mt-3 h-1.5" />}
+        ))}
+      </div>
+
+      <div className="mt-4 flex min-h-6 items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>{sampleLabel}</span>
+        {card.mistakeCount > 0 && <span>Mistakes: {card.mistakeCount}</span>}
+      </div>
+      {mode === "detail" && <Progress value={card.confidence * 100} className="mt-2 h-1.5" />}
     </button>
   );
 }
@@ -924,7 +885,7 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8">
-        <section className="order-3 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="order-1 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card className="casino-surface border-primary/20 bg-card shadow-2xl shadow-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl text-white">
@@ -1117,7 +1078,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="order-1 space-y-6">
+        <section className="order-2 space-y-6">
           <Card className="border-border bg-card">
             <CardHeader>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1468,7 +1429,7 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section className="order-2">
+        <section className="order-3">
           <Card className="border-primary/20 bg-card shadow-xl shadow-primary/5">
             <CardHeader>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1488,28 +1449,24 @@ export default function Dashboard() {
                 {(report?.blindVsBlind.gradeCards ?? []).map((card) => (
                   <div key={card.key} className="rounded-2xl border border-border bg-background p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-semibold text-white">{card.label}</p>
-                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{card.note}</p>
-                      </div>
+                      <p className="text-xl font-semibold leading-tight text-white">{card.label}</p>
                       <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", card.grade === "N/A" ? "border-slate-500/30 bg-slate-500/10 text-slate-300" : "border-primary/30 bg-primary/10 text-primary")}>
                         {card.grade}
                       </Badge>
                     </div>
-                    <div className="mt-5 grid grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Opps</p>
-                        <p className="mt-1 font-mono text-xl text-white">{card.opportunities}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Leaks</p>
-                        <p className="mt-1 font-mono text-xl text-white">{card.leakCount}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Rate</p>
-                        <p className="mt-1 font-mono text-xl text-white">{formatOneDecimalPercent(card.leakRate)}</p>
-                      </div>
+                    <div className="mt-5 grid gap-3">
+                      {[
+                        ["Hands", card.opportunities.toLocaleString()],
+                        ["Baseline", "--"],
+                        ["Your %", "--"],
+                      ].map(([label, value]) => (
+                        <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
+                          <span className="text-base font-medium text-muted-foreground">{label}</span>
+                          <span className="font-mono text-2xl font-semibold text-white">{value}</span>
+                        </div>
+                      ))}
                     </div>
+                    <p className="mt-4 text-sm text-muted-foreground">Mistakes: {card.leakCount}</p>
                   </div>
                 ))}
                 {(!report || report.blindVsBlind.gradeCards.length === 0) && (
@@ -1573,7 +1530,7 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section className="order-4">
+        <section className="order-5">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
@@ -1732,7 +1689,7 @@ export default function Dashboard() {
           </Collapsible>
         </section>
 
-        <section className="order-5">
+        <section className="order-6">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
@@ -1746,7 +1703,7 @@ export default function Dashboard() {
               </CardHeader>
               <CollapsibleContent>
                 <CardContent className="space-y-6">
-        <section className="order-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="order-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card className="border-border bg-card">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
@@ -1776,7 +1733,7 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section className="order-7 grid gap-6 lg:grid-cols-[0.9fr_0.9fr_1.1fr]">
+        <section className="order-8 grid gap-6 lg:grid-cols-[0.9fr_0.9fr_1.1fr]">
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle className="text-white">Weighted Leak Report</CardTitle>
@@ -1960,7 +1917,7 @@ export default function Dashboard() {
           </Collapsible>
         </section>
 
-        <section className="order-8">
+        <section className="order-9">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>
