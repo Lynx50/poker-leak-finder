@@ -24,6 +24,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
 import { getBaselineTargetPercent } from "@/lib/poker/baseline-targets";
+import { getDashboardRfiTargetPercent } from "@/lib/poker/dashboard-rfi-targets";
 import {
   buildDashboardGradeSummary,
   classifyDecisionsForGrading,
@@ -1172,9 +1173,8 @@ export default function Dashboard() {
                     <GradeTile
                       key={card.key}
                       card={card}
-                      baselineTarget={getCardBaselineTarget(card.key)}
-                      baselineLabelOverride={baselineLabelOverride}
-                      metricLabels={{ baseline: "Open Target", actual: "Your Open" }}
+                      baselineTarget={getDashboardRfiTargetPercent(card.key)}
+                      metricLabels={{ baseline: "RFI Target", actual: "Your RFI" }}
                       descriptor="Open-raise frequency from this position"
                       active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
                       onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
