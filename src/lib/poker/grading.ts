@@ -223,7 +223,7 @@ function getActionTakenLabel(action: GradingActionFamily) {
 }
 
 function getPrimaryPositionFrequencyFamily(position: Position): GradingActionFamily {
-  return position === "BB" ? "Call" : "RFI";
+  return "RFI";
 }
 
 function getActionFrequency(
@@ -468,7 +468,7 @@ export function buildDashboardGradeSummary(
     POSITION_ORDER.map((position) => ({
       key: position,
       label: getPositionLabel(position),
-      predicate: (decision) => decision.heroPosition === position,
+      predicate: (decision) => decision.heroPosition === position && isActionOpportunity(decision, "RFI"),
       actionFrequencyFamily: getPrimaryPositionFrequencyFamily(position),
       actionFrequencyPredicate: (decision) =>
         decision.heroPosition === position && isActionOpportunity(decision, getPrimaryPositionFrequencyFamily(position)),

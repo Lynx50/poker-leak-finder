@@ -277,6 +277,8 @@ function GradeTile({
   card,
   baselineTarget,
   baselineLabelOverride,
+  metricLabels = { baseline: "Baseline", actual: "Your %" },
+  descriptor,
   onClick,
   active,
   mode = "summary",
@@ -284,6 +286,11 @@ function GradeTile({
   card: GradeCard;
   baselineTarget?: number | null;
   baselineLabelOverride?: string;
+  metricLabels?: {
+    baseline: string;
+    actual: string;
+  };
+  descriptor?: string;
   onClick?: () => void;
   active?: boolean;
   mode?: "summary" | "detail";
@@ -308,7 +315,10 @@ function GradeTile({
       )}
     >
       <div className="flex items-start justify-between gap-4">
-        <p className="min-w-0 font-mono text-xl font-semibold leading-tight text-white">{card.label}</p>
+        <div className="min-w-0">
+          <p className="font-mono text-xl font-semibold leading-tight text-white">{card.label}</p>
+          {descriptor && <p className="mt-2 text-sm leading-snug text-muted-foreground">{descriptor}</p>}
+        </div>
         <Badge variant="outline" className={cn("shrink-0 border px-3 py-1 font-mono text-xl", getGradeTone(card))}>
           {card.grade}
         </Badge>
@@ -317,8 +327,8 @@ function GradeTile({
       <div className="mt-5 grid gap-3">
         {[
           ["Hands", card.opportunityCount.toLocaleString()],
-          ["Baseline", baselineLabel],
-          ["Your %", yourPercentLabel],
+          [metricLabels.baseline, baselineLabel],
+          [metricLabels.actual, yourPercentLabel],
         ].map(([label, value]) => (
           <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
             <span className="text-base font-medium text-muted-foreground">{label}</span>
@@ -1164,6 +1174,8 @@ export default function Dashboard() {
                       card={card}
                       baselineTarget={getCardBaselineTarget(card.key)}
                       baselineLabelOverride={baselineLabelOverride}
+                      metricLabels={{ baseline: "Open Target", actual: "Your Open" }}
+                      descriptor="Open-raise frequency from this position"
                       active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
                       onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
                     />

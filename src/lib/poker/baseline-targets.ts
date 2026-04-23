@@ -95,7 +95,7 @@ function baselineFromNodes(
 
 function unopenedNodeKeys(position: Position) {
   if (position === "BB") {
-    return ["SB_open_BB_decision", "BTN_open_BB_decision", "blind_defense_default_decision"];
+    return [];
   }
 
   return [`${position}_unopened_decision`, "unopened_default_decision"];
@@ -137,7 +137,7 @@ function nodeKeysForActionFamily(family: GradingActionFamily) {
 }
 
 function primaryPositionFamily(position: Position): GradingActionFamily {
-  return position === "BB" ? "Call" : "RFI";
+  return "RFI";
 }
 
 function parseCardKey(cardKey: string): { position?: Position; family?: GradingActionFamily } {
