@@ -23,6 +23,7 @@ import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { LeakHandViewer } from "@/components/poker/leak-hand-viewer";
+import { RangeEditor } from "@/components/poker/range-editor";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
 import { getBaselineTargetPercent } from "@/lib/poker/baseline-targets";
 import { getDashboardRfiTargetPercent } from "@/lib/poker/dashboard-rfi-targets";
@@ -36,10 +37,11 @@ import {
   POSITION_ORDER,
   TOURNAMENT_FORMAT_FILTER_OPTIONS,
 } from "@/lib/poker/grading";
+import { buildRangeComboActionMap, createEmptyRangeComboActionMap, serializeRangeEditorNode } from "@/lib/poker/range-editor";
 import { createImportedRangeState, createManualRangeState, getDefaultRangeLibraryState, loadRangeLibraryState, saveRangeLibraryState } from "@/lib/poker/range-store";
-import { BUILT_IN_RANGE_PACK, exportRangePack, formatRangeTokens, getEffectiveRangeNodes, parseRangeText, validateRangePack } from "@/lib/poker/ranges";
+import { BUILT_IN_RANGE_PACK, exportRangePack, getEffectiveRangeNodes, validateRangePack } from "@/lib/poker/ranges";
 import { STACK_DEPTH_BUCKETS } from "@/lib/poker/stack-depth";
-import { AnalysisReport, BlindVsBlindGradeCard, GradeCard, GradingActionFamily, GradingEligibility, LeakBucket, Position, PreflopRangeNode, RangeAction, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
+import { AnalysisReport, BlindVsBlindGradeCard, GradeCard, GradingActionFamily, GradingEligibility, LeakBucket, Position, RangeComboActionMap, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
 import { cn } from "@/lib/utils";
 
 type AnalysisResult = {
@@ -73,8 +75,6 @@ type FilterState = {
   leakLabel: string;
 };
 
-type RangeEditorState = Record<RangeAction, string>;
-
 type DrilldownSelection =
   | { type: "position"; key: Position; action?: GradingActionFamily }
   | { type: "action"; key: GradingActionFamily }
@@ -102,7 +102,6 @@ const EMPTY_FILTERS: FilterState = {
   leakLabel: "",
 };
 
-const RANGE_ACTIONS: RangeAction[] = ["Raise", "Call", "Fold", "Jam", "Check", "Continue"];
 const UPLOAD_HISTORY_KEY = "poker-leak-finder-upload-history";
 const EXPERIMENTAL_RFI_POSITION: Position = "BTN";
 const EXPERIMENTAL_RFI_ACTION: GradingActionFamily = "RFI";
@@ -122,17 +121,6 @@ function includesText(source: string, query: string) {
 
 function csvCell(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
-}
-
-function createEditorState(node?: PreflopRangeNode): RangeEditorState {
-  return {
-    Raise: formatRangeTokens(node?.actions.Raise),
-    Call: formatRangeTokens(node?.actions.Call),
-    Fold: formatRangeTokens(node?.actions.Fold),
-    Jam: formatRangeTokens(node?.actions.Jam),
-    Check: formatRangeTokens(node?.actions.Check),
-    Continue: formatRangeTokens(node?.actions.Continue),
-  };
 }
 
 function getSourceBadge(source: RangeSourceKind) {
@@ -512,7 +500,7 @@ export default function Dashboard() {
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
   const [rangeLibrary, setRangeLibrary] = useState<RangeLibraryState>(() => loadRangeLibraryState());
   const [selectedRangeNodeKey, setSelectedRangeNodeKey] = useState("");
-  const [rangeEditor, setRangeEditor] = useState<RangeEditorState>(() => createEditorState());
+  const [rangeEditor, setRangeEditor] = useState<RangeComboActionMap>(() => createEmptyRangeComboActionMap());
   const [invalidRangeMessage, setInvalidRangeMessage] = useState<string | null>(null);
   const [tournamentFormatFilter, setTournamentFormatFilter] = useState<TournamentFormatFilter>("all_tournaments");
   const [selectedDrilldown, setSelectedDrilldown] = useState<DrilldownSelection | null>(null);
@@ -549,7 +537,7 @@ export default function Dashboard() {
   }, [effectiveRangeNodes, editableNodeKeys, selectedRangeNodeKey]);
 
   useEffect(() => {
-    setRangeEditor(createEditorState(selectedRangeNode));
+    setRangeEditor(buildRangeComboActionMap(selectedRangeNode));
   }, [selectedRangeNodeKey, selectedRangeNode]);
 
   const openLeakViewer = (title: string, bucket: LeakBucket, description?: string) => {
@@ -1008,37 +996,24 @@ export default function Dashboard() {
     setStatus("Switched scoring to the current custom range overrides.");
   };
 
-  const handleRangeFieldChange = (action: RangeAction, value: string) => {
-    setRangeEditor((current) => ({
-      ...current,
-      [action]: value,
-    }));
-  };
-
   const handleSaveRangeNode = () => {
     if (!selectedRangeNodeKey) {
       setStatus("Select a range node before saving edits.");
       return;
     }
 
-    const nodeActions = RANGE_ACTIONS.reduce<Partial<Record<RangeAction, string[]>>>((acc, action) => {
-      const tokens = parseRangeText(rangeEditor[action]);
-      if (tokens.length > 0) {
-        acc[action] = tokens;
-      }
-      return acc;
-    }, {});
-
     const payload = {
       version: "1.0.0",
       sourceLabel: "Manual Custom Ranges",
       nodes: {
-        [selectedRangeNodeKey]: {
-          nodeKey: selectedRangeNodeKey,
-          label: selectedRangeNode?.label ?? selectedRangeNodeKey,
-          stackBucket: selectedRangeNode?.stackBucket ?? "10–15bb",
-          actions: nodeActions,
-        },
+        [selectedRangeNodeKey]: serializeRangeEditorNode(
+          selectedRangeNodeKey,
+          selectedRangeNode?.label ?? selectedRangeNodeKey,
+          selectedRangeNode?.stackBucket ?? "10–15bb",
+          selectedRangeNode?.sourceLabel ?? "Manual Custom Ranges",
+          rangeEditor,
+          selectedRangeNode?.actions,
+        ),
       },
     };
 
@@ -1871,26 +1846,17 @@ export default function Dashboard() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {RANGE_ACTIONS.map((action) => (
-                          <div key={action} className="rounded-md border border-border bg-background p-4">
-                            <label className="text-xs uppercase tracking-wider text-muted-foreground">{action}</label>
-                            <Textarea
-                              value={rangeEditor[action]}
-                              onChange={(event) => handleRangeFieldChange(action, event.target.value)}
-                              placeholder="e.g. TT+, AQs+, AKo"
-                              className="mt-2 min-h-[110px] bg-card font-mono text-xs"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      <RangeEditor
+                        baselineName={selectedRangeNode?.label ?? selectedRangeNodeKey}
+                        node={selectedRangeNode}
+                        value={rangeEditor}
+                        onChange={setRangeEditor}
+                        onReset={() => setRangeEditor(buildRangeComboActionMap(selectedRangeNode))}
+                      />
 
                       <div className="flex flex-wrap gap-3">
                         <Button onClick={handleSaveRangeNode}>Save Node Override</Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => setRangeEditor(createEditorState(selectedRangeNode))}
-                        >
+                        <Button variant="secondary" onClick={() => setRangeEditor(buildRangeComboActionMap(selectedRangeNode))}>
                           Reset Editor
                         </Button>
                       </div>
@@ -2519,3 +2485,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

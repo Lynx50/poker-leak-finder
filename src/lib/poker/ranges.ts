@@ -1,4 +1,4 @@
-import { DecisionSeed, PreflopRangeNode, RangeAction, RangeLibraryState, RangePack, RangeResolution, RangeSourceKind, RangeValidationResult } from "./types";
+import { DecisionSeed, PreflopRangeNode, RangeAction, RangeEditorAction, RangeLibraryState, RangePack, RangeResolution, RangeSourceKind, RangeValidationResult } from "./types";
 
 const ACTION_PRIORITY: RangeAction[] = ["Jam", "Raise", "Call", "Check", "Continue", "Fold"];
 const ACTION_SET = new Set<RangeAction>(ACTION_PRIORITY);
@@ -325,11 +325,28 @@ function isValidRangeToken(token: string) {
   );
 }
 
+function isValidComboKey(token: string) {
+  if (!/^[2-9TJQKA]{2}[so]?$/.test(token)) return false;
+  const first = token[0];
+  const second = token[1];
+
+  if (first === second) {
+    return token.length === 2;
+  }
+
+  return token.length === 3 && (token.endsWith("s") || token.endsWith("o"));
+}
+
+function isRangeEditorAction(value: unknown): value is RangeEditorAction {
+  return value === "raise" || value === "call" || value === "jam" || value === "fold";
+}
+
 function normalizeNode(nodeKey: string, input: unknown, sourceLabel: string): PreflopRangeNode | null {
   if (!input || typeof input !== "object") return null;
-  const candidate = input as Partial<PreflopRangeNode> & { actions?: unknown };
+  const candidate = input as Partial<PreflopRangeNode> & { actions?: unknown; comboActions?: unknown };
   const rawActions = candidate.actions && typeof candidate.actions === "object" ? candidate.actions : input;
   const actions: Partial<Record<RangeAction, string[]>> = {};
+  let comboActions: PreflopRangeNode["comboActions"] | undefined;
 
   for (const [actionKey, tokens] of Object.entries(rawActions as Record<string, unknown>)) {
     if (!ACTION_SET.has(actionKey as RangeAction)) {
@@ -345,12 +362,26 @@ function normalizeNode(nodeKey: string, input: unknown, sourceLabel: string): Pr
     return null;
   }
 
+  if (candidate.comboActions && typeof candidate.comboActions === "object") {
+    const entries = Object.entries(candidate.comboActions as Record<string, unknown>);
+    const isValid = entries.every(([combo, action]) => isValidComboKey(combo) && isRangeEditorAction(action));
+    if (!isValid) {
+      return null;
+    }
+
+    comboActions = entries.reduce<NonNullable<PreflopRangeNode["comboActions"]>>((acc, [combo, action]) => {
+      acc[combo] = action as RangeEditorAction;
+      return acc;
+    }, {});
+  }
+
   return {
     nodeKey,
     label: candidate.label ?? nodeKey,
     stackBucket: candidate.stackBucket ?? "10–15bb",
     sourceLabel: candidate.sourceLabel ?? sourceLabel,
     actions,
+    comboActions,
   };
 }
 
@@ -403,7 +434,7 @@ function getNodeSupport(nodeKey: string, usesFallback: boolean): RangeResolution
   return "strong";
 }
 
-function findActionForHand(node: PreflopRangeNode, heroCards: string) {
+export function getRangeActionForHand(node: PreflopRangeNode, heroCards: string) {
   for (const action of ACTION_PRIORITY) {
     const tokens = node.actions[action];
     if (tokens?.some((token) => matchesRangeToken(heroCards, token))) {
@@ -423,7 +454,7 @@ export function resolveRangeDecision(seed: DecisionSeed, libraryState: RangeLibr
   for (const nodeKey of lookupKeys) {
     const customNode = libraryState.activeSource === "built_in" ? null : libraryState.nodes[nodeKey];
     if (customNode) {
-      const preferredAction = findActionForHand(customNode, seed.heroCards);
+      const preferredAction = getRangeActionForHand(customNode, seed.heroCards);
       if (preferredAction) {
         return {
           preferredAction,
@@ -440,7 +471,7 @@ export function resolveRangeDecision(seed: DecisionSeed, libraryState: RangeLibr
 
     const builtInNode = BUILT_IN_RANGE_PACK.nodes[nodeKey];
     if (builtInNode) {
-      const preferredAction = findActionForHand(builtInNode, seed.heroCards);
+      const preferredAction = getRangeActionForHand(builtInNode, seed.heroCards);
       if (preferredAction) {
         return {
           preferredAction,

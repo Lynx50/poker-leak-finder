@@ -30,6 +30,8 @@ export type HandTier =
   | "trash";
 
 export type RangeAction = "Raise" | "Call" | "Fold" | "Jam" | "Continue" | "Check";
+export type RangeEditorAction = "raise" | "call" | "jam" | "fold";
+export type RangeComboActionMap = Record<string, RangeEditorAction>;
 
 export type RangeSourceKind = "built_in" | "custom_import" | "custom_manual";
 
@@ -54,6 +56,7 @@ export type PreflopRangeNode = {
   stackBucket?: string;
   sourceLabel: string;
   actions: Partial<Record<RangeAction, string[]>>;
+  comboActions?: RangeComboActionMap;
 };
 
 export type RangePack = {
