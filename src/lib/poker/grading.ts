@@ -258,31 +258,98 @@ function getActionFrequency(
   };
 }
 
-function isHighConfidenceRfiDecision(decision: SupportedDecision) {
+const DIRECTIONAL_LEAK_LABELS: Record<GradingActionFamily, { tightLabel: string; wideLabel: string }> = {
+  RFI: { tightLabel: "Folded Too Tight", wideLabel: "Opened Too Wide" },
+  Call: { tightLabel: "Folded Too Tight", wideLabel: "Called Too Wide" },
+  "3-bet": { tightLabel: "Passed on 3-Bets", wideLabel: "3-Bet Too Wide" },
+  Fold: { tightLabel: "Overfolded", wideLabel: "Defended Too Wide" },
+  Jam: { tightLabel: "Passed on Jams", wideLabel: "Jammed Too Wide" },
+};
+
+function isHighConfidenceDirectionalDecision(decision: SupportedDecision) {
   return (
-    decision.family === "unopened" &&
     decision.confidenceTier === "clean" &&
     decision.nodeSupport === "strong" &&
     !decision.usesFallback
   );
 }
 
-function getRfiLeakSummary(scoredDecisions: SupportedDecision[]): GradeCard["rfiLeakSummary"] {
-  const highConfidenceRfiDecisions = scoredDecisions.filter(isHighConfidenceRfiDecision);
-  const missedOpens = highConfidenceRfiDecisions.filter(
-    (decision) => decision.actualAction === "Fold" && (decision.preferredAction === "Raise" || decision.preferredAction === "Jam"),
-  ).length;
-  const tooWideOpens = highConfidenceRfiDecisions.filter(
-    (decision) => (decision.actualAction === "Raise" || decision.actualAction === "Jam") && decision.preferredAction === "Fold",
-  ).length;
+function isRaiseLike(action: string) {
+  return action === "Raise" || action === "Jam";
+}
+
+function isDefendLike(action: string) {
+  return action !== "Fold";
+}
+
+function getDirectionalLeakCounts(action: GradingActionFamily, decisions: SupportedDecision[]) {
+  switch (action) {
+    case "RFI":
+      return {
+        tightCount: decisions.filter(
+          (decision) => decision.family === "unopened" && decision.actualAction === "Fold" && isRaiseLike(decision.preferredAction),
+        ).length,
+        wideCount: decisions.filter(
+          (decision) => decision.family === "unopened" && isRaiseLike(decision.actualAction) && decision.preferredAction === "Fold",
+        ).length,
+      };
+    case "Call":
+      return {
+        tightCount: decisions.filter(
+          (decision) => decision.actualAction === "Fold" && decision.preferredAction === "Call",
+        ).length,
+        wideCount: decisions.filter(
+          (decision) => decision.actualAction === "Call" && decision.preferredAction === "Fold",
+        ).length,
+      };
+    case "3-bet":
+      return {
+        tightCount: decisions.filter(
+          (decision) => !isRaiseLike(decision.actualAction) && isRaiseLike(decision.preferredAction),
+        ).length,
+        wideCount: decisions.filter(
+          (decision) => isRaiseLike(decision.actualAction) && !isRaiseLike(decision.preferredAction),
+        ).length,
+      };
+    case "Fold":
+      return {
+        tightCount: decisions.filter(
+          (decision) => decision.actualAction === "Fold" && isDefendLike(decision.preferredAction),
+        ).length,
+        wideCount: decisions.filter(
+          (decision) => isDefendLike(decision.actualAction) && decision.preferredAction === "Fold",
+        ).length,
+      };
+    case "Jam":
+      return {
+        tightCount: decisions.filter(
+          (decision) => decision.actualAction !== "Jam" && decision.preferredAction === "Jam",
+        ).length,
+        wideCount: decisions.filter(
+          (decision) => decision.actualAction === "Jam" && decision.preferredAction !== "Jam",
+        ).length,
+      };
+  }
+}
+
+function getDirectionalLeakSummary(
+  action: GradingActionFamily | undefined,
+  scoredDecisions: SupportedDecision[],
+): GradeCard["directionalLeakSummary"] {
+  if (!action) return undefined;
+
+  const labels = DIRECTIONAL_LEAK_LABELS[action];
+  const highConfidenceDecisions = scoredDecisions.filter(isHighConfidenceDirectionalDecision);
+  const { tightCount, wideCount } = getDirectionalLeakCounts(action, highConfidenceDecisions);
 
   return {
-    missedOpens,
-    tooWideOpens,
+    ...labels,
+    tightCount,
+    wideCount,
     tendency:
-      missedOpens > tooWideOpens
+      tightCount > wideCount
         ? "Too Tight"
-        : tooWideOpens > missedOpens
+        : wideCount > tightCount
           ? "Too Loose"
           : "Balanced",
   };
@@ -351,7 +418,7 @@ function gradeDecisions(
     actionFrequencyFamily,
     baselineAdjustment,
   );
-  const rfiLeakSummary = actionFrequencyFamily === "RFI" ? getRfiLeakSummary(scoredDecisions) : undefined;
+  const directionalLeakSummary = getDirectionalLeakSummary(actionFrequencyFamily, scoredDecisions);
 
   if (scoredCount < config.minProvisionalSample) {
     return {
@@ -369,7 +436,7 @@ function gradeDecisions(
       confidence,
       studyHint: buildStudyHint(label, scoredDecisions, opportunities, null, actionFrequency),
       actionFrequency,
-      rfiLeakSummary,
+      directionalLeakSummary,
     };
   }
 
@@ -396,7 +463,7 @@ function gradeDecisions(
     confidence,
     studyHint: buildStudyHint(label, scoredDecisions, opportunities, rawScore, actionFrequency),
     actionFrequency,
-    rfiLeakSummary,
+    directionalLeakSummary,
   };
 }
 

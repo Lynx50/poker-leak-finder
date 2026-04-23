@@ -233,9 +233,11 @@ function makeEmptyGradeCard(key: string, label: string): GradeCard {
     weightedSeverity: 0,
     confidence: 0,
     studyHint: "No recent opportunities yet.",
-    rfiLeakSummary: {
-      missedOpens: 0,
-      tooWideOpens: 0,
+    directionalLeakSummary: {
+      tightLabel: "Folded Too Tight",
+      wideLabel: "Opened Too Wide",
+      tightCount: 0,
+      wideCount: 0,
       tendency: "Balanced",
     },
   };
@@ -308,7 +310,7 @@ function GradeTile({
   const yourPercentLabel = card.actionFrequency
     ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
     : "--";
-  const rfiLeakSummary = card.rfiLeakSummary;
+  const directionalLeakSummary = card.directionalLeakSummary;
   const sampleLabel =
     card.status === "not_enough_data" ? "Low sample" : card.status === "provisional" ? "Provisional" : null;
 
@@ -344,11 +346,11 @@ function GradeTile({
         ))}
       </div>
 
-      {rfiLeakSummary && (
+      {directionalLeakSummary && (
         <div className="mt-4 grid gap-3">
           {[
-            ["Missed Opens", rfiLeakSummary.missedOpens.toLocaleString()],
-            ["Too Wide Opens", rfiLeakSummary.tooWideOpens.toLocaleString()],
+            [directionalLeakSummary.tightLabel, directionalLeakSummary.tightCount.toLocaleString()],
+            [directionalLeakSummary.wideLabel, directionalLeakSummary.wideCount.toLocaleString()],
           ].map(([label, value]) => (
             <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/40 px-4 py-2.5">
               <span className="text-sm font-medium text-muted-foreground">{label}</span>
@@ -358,11 +360,11 @@ function GradeTile({
         </div>
       )}
 
-      <div className="mt-4 flex min-h-6 items-center justify-between gap-3 text-sm text-muted-foreground">
+        <div className="mt-4 flex min-h-6 items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>{sampleLabel}</span>
-        {rfiLeakSummary && (
+        {directionalLeakSummary && (
           <Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary">
-            {rfiLeakSummary.tendency}
+            {directionalLeakSummary.tendency}
           </Badge>
         )}
       </div>

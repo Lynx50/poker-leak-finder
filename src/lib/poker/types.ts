@@ -192,9 +192,11 @@ export type GradeCard = {
     otherCount: number;
     baselineCount: number | null;
   };
-  rfiLeakSummary?: {
-    missedOpens: number;
-    tooWideOpens: number;
+  directionalLeakSummary?: {
+    tightLabel: string;
+    wideLabel: string;
+    tightCount: number;
+    wideCount: number;
     tendency: "Too Tight" | "Too Loose" | "Balanced";
   };
 };
