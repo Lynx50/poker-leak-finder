@@ -296,7 +296,7 @@ function GradeTile({
   active?: boolean;
   mode?: "summary" | "detail";
 }) {
-  const resolvedBaseline = card.actionFrequency?.baselinePercent ?? baselineTarget ?? null;
+  const resolvedBaseline = baselineTarget ?? card.actionFrequency?.baselinePercent ?? null;
   const baselineLabel = baselineLabelOverride ?? (resolvedBaseline !== null
     ? formatOneDecimalPercent(resolvedBaseline)
     : "--");
@@ -376,6 +376,11 @@ export default function Dashboard() {
   );
   const editableNodeKeys = useMemo(() => Object.keys(effectiveRangeNodes).sort(), [effectiveRangeNodes]);
   const selectedRangeNode = selectedRangeNodeKey ? effectiveRangeNodes[selectedRangeNodeKey] : undefined;
+  const hasBlindVsBlindData =
+    (report?.blindVsBlind.bvbHands ?? 0) > 0 ||
+    (report?.blindVsBlind.opportunities.length ?? 0) > 0 ||
+    (report?.blindVsBlind.preflopCounts.length ?? 0) > 0 ||
+    (report?.blindVsBlind.postflopCounts.length ?? 0) > 0;
 
   useEffect(() => {
     setStoredUploadBatches(readStoredUploadBatches());
@@ -1489,43 +1494,51 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {(report?.blindVsBlind.gradeCards ?? []).map((card) => (
-                  <div key={card.key} className="rounded-2xl border border-border bg-background p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-xl font-semibold leading-tight text-white">{card.label}</p>
-                      <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", card.grade === "N/A" ? "border-slate-500/30 bg-slate-500/10 text-slate-300" : "border-primary/30 bg-primary/10 text-primary")}>
-                        {card.grade}
-                      </Badge>
+              {!hasBlindVsBlindData ? (
+                <div className="rounded-2xl border border-dashed border-border bg-background p-6">
+                  <p className="text-lg font-semibold text-white">Blind vs blind metrics not populated yet</p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    This section only fills when the parser detects folded-to-SB hands and explicit SB/BB branches.
+                    If your uploaded sample has no detected blind-vs-blind opportunities, no stats are shown here.
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Coming soon: dedicated SB limp, SB raise, BB defend, iso, and postflop blind-vs-blind benchmarks.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {(report?.blindVsBlind.gradeCards ?? []).map((card) => (
+                    <div key={card.key} className="rounded-2xl border border-border bg-background p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-xl font-semibold leading-tight text-white">{card.label}</p>
+                        <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", card.grade === "N/A" ? "border-slate-500/30 bg-slate-500/10 text-slate-300" : "border-primary/30 bg-primary/10 text-primary")}>
+                          {card.grade}
+                        </Badge>
+                      </div>
+                      <div className="mt-5 grid gap-3">
+                        {[
+                          ["Hands", card.opportunities.toLocaleString()],
+                          [
+                            "Baseline",
+                            (() => {
+                              if (baselineLabelOverride) return baselineLabelOverride;
+                              const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
+                              return target !== null ? formatOneDecimalPercent(target) : "--";
+                            })(),
+                          ],
+                          ["Your %", "--"],
+                        ].map(([label, value]) => (
+                          <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
+                            <span className="text-base font-medium text-muted-foreground">{label}</span>
+                            <span className="font-mono text-2xl font-semibold text-white">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-4 text-sm text-muted-foreground">Mistakes: {card.leakCount}</p>
                     </div>
-                    <div className="mt-5 grid gap-3">
-                      {[
-                        ["Hands", card.opportunities.toLocaleString()],
-                        [
-                          "Baseline",
-                          (() => {
-                            if (baselineLabelOverride) return baselineLabelOverride;
-                            const target = getBlindVsBlindBaselineTarget(card.key, getCardBaselineTarget);
-                            return target !== null ? formatOneDecimalPercent(target) : "--";
-                          })(),
-                        ],
-                        ["Your %", "--"],
-                      ].map(([label, value]) => (
-                        <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/60 px-4 py-3">
-                          <span className="text-base font-medium text-muted-foreground">{label}</span>
-                          <span className="font-mono text-2xl font-semibold text-white">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-4 text-sm text-muted-foreground">Mistakes: {card.leakCount}</p>
-                  </div>
-                ))}
-                {(!report || report.blindVsBlind.gradeCards.length === 0) && (
-                  <div className="rounded-2xl border border-border bg-background p-5 text-base text-muted-foreground sm:col-span-2 xl:col-span-3">
-                    Run analysis to populate dedicated Blind vs Blind grades.
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-background p-5">
