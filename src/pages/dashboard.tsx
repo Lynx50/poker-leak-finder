@@ -924,7 +924,7 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8">
-        <section className="order-2 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="order-3 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card className="casino-surface border-primary/20 bg-card shadow-2xl shadow-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl text-white">
@@ -1468,7 +1468,112 @@ export default function Dashboard() {
           </Card>
         </section>
 
-        <section className="order-3">
+        <section className="order-2">
+          <Card className="border-primary/20 bg-card shadow-xl shadow-primary/5">
+            <CardHeader>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="text-2xl text-white">Blind vs Blind Priority Module</CardTitle>
+                  <CardDescription className="text-base">
+                    Dedicated SB/BB tree. Limp, iso, raise, 3-bet, jam, and limped-pot postflop branches stay separate from normal position reports.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 px-4 py-2 text-primary">
+                  {report?.blindVsBlind.bvbHands ?? 0} BvB hands
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {(report?.blindVsBlind.gradeCards ?? []).map((card) => (
+                  <div key={card.key} className="rounded-2xl border border-border bg-background p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-semibold text-white">{card.label}</p>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{card.note}</p>
+                      </div>
+                      <Badge variant="outline" className={cn("border px-3 py-1 font-mono text-lg", card.grade === "N/A" ? "border-slate-500/30 bg-slate-500/10 text-slate-300" : "border-primary/30 bg-primary/10 text-primary")}>
+                        {card.grade}
+                      </Badge>
+                    </div>
+                    <div className="mt-5 grid grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Opps</p>
+                        <p className="mt-1 font-mono text-xl text-white">{card.opportunities}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Leaks</p>
+                        <p className="mt-1 font-mono text-xl text-white">{card.leakCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Rate</p>
+                        <p className="mt-1 font-mono text-xl text-white">{formatOneDecimalPercent(card.leakRate)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(!report || report.blindVsBlind.gradeCards.length === 0) && (
+                  <div className="rounded-2xl border border-border bg-background p-5 text-base text-muted-foreground sm:col-span-2 xl:col-span-3">
+                    Run analysis to populate dedicated Blind vs Blind grades.
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-background p-5">
+                  <p className="text-sm uppercase tracking-wider text-muted-foreground">Preflop BvB Tree Counts</p>
+                  <div className="mt-4 grid gap-2">
+                    {(report?.blindVsBlind.preflopCounts ?? []).slice(0, 12).map((entry) => (
+                      <div key={`${entry.branch}-${entry.action}`} className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="font-mono text-sm text-white">{entry.branch} / {entry.action}</span>
+                        <span className="font-mono text-sm text-primary">{entry.count}</span>
+                      </div>
+                    ))}
+                    {(!report || report.blindVsBlind.preflopCounts.length === 0) && (
+                      <p className="text-sm text-muted-foreground">No BvB preflop branches detected yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-background p-5">
+                  <p className="text-sm uppercase tracking-wider text-muted-foreground">Jam Decisions By Stack Depth</p>
+                  <div className="mt-4 grid gap-2">
+                    {(report?.blindVsBlind.stackSummary ?? []).map((entry) => (
+                      <div key={entry.bucket} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
+                        <span className="font-mono text-sm text-white">{entry.bucket}</span>
+                        <span className="font-mono text-sm text-muted-foreground">{entry.opportunities} opps</span>
+                        <span className="font-mono text-sm text-primary">{formatOneDecimalPercent(entry.jamRate)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background p-5">
+                <p className="text-sm uppercase tracking-wider text-muted-foreground">Postflop Pot-Type Tracking</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Limped pot = SB limp / BB check. Iso pot = SB limp / BB raise / SB call. Raised pot = SB open / BB call. 3-bet pot = SB open / BB 3-bet / SB call.
+                </p>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {(report?.blindVsBlind.postflopCounts ?? []).slice(0, 16).map((entry) => (
+                    <div key={`${entry.potType}-${entry.street}-${entry.role}-${entry.action}`} className="rounded-lg border border-border bg-card px-3 py-2">
+                      <p className="font-mono text-sm text-white">{entry.potType}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{entry.street} / {entry.role} / {entry.action}</p>
+                      <p className="mt-2 font-mono text-lg text-primary">{entry.count}</p>
+                    </div>
+                  ))}
+                  {(!report || report.blindVsBlind.postflopCounts.length === 0) && (
+                    <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-4">
+                      No tracked BvB postflop actions yet. Limped pot flop actions will appear here when detected.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="order-4">
           <Collapsible>
             <Card className="border-border bg-card">
               <CardHeader>

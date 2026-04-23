@@ -1,7 +1,8 @@
+import { buildBlindVsBlindReport } from "./blind-vs-blind";
 import { classifyPreflopOpportunity, scorePreflopOpportunity } from "./classifier";
 import { getDecisionOpportunityActions } from "./grading";
 import { parseHand, splitHandHistories } from "./parser";
-import { AnalysisReport, ExcludedDecision, PreflopOpportunity, RangeLibraryState, SkippedHandLog, SkipReason, SupportedDecision } from "./types";
+import { AnalysisReport, ExcludedDecision, ParsedHand, PreflopOpportunity, RangeLibraryState, SkippedHandLog, SkipReason, SupportedDecision } from "./types";
 
 const SKIP_REASON_ORDER: SkipReason[] = [
   "NOT_SRP",
@@ -51,6 +52,7 @@ export function analyzeHandHistories(
   const supported: SupportedDecision[] = [];
   const excluded: ExcludedDecision[] = [];
   const skippedHands: SkippedHandLog[] = [];
+  const parsedHandRecords: ParsedHand[] = [];
   let parsedHands = 0;
 
   for (const rawHand of rawHands) {
@@ -68,6 +70,7 @@ export function analyzeHandHistories(
     }
 
     parsedHands += 1;
+    parsedHandRecords.push(parsed);
     const opportunity = classifyPreflopOpportunity(parsed);
 
     if ("reason" in opportunity) {
@@ -257,5 +260,6 @@ export function analyzeHandHistories(
       .map(([nodeKey, count]) => ({ nodeKey, count }))
       .slice(0, 5),
     invalidRangeMessage,
+    blindVsBlind: buildBlindVsBlindReport(parsedHandRecords),
   };
 }

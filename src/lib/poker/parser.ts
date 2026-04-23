@@ -1,5 +1,5 @@
 import { parseHeroCards } from "./cards";
-import { ParsedAction, ParsedActionType, ParsedHand, PlayerSeat, Position } from "./types";
+import { ParsedAction, ParsedActionType, ParsedHand, ParsedStreet, ParsedStreetActions, PlayerSeat, Position } from "./types";
 
 const HAND_START = /(?=PokerStars Hand #)/g;
 const ACTION_REGEX = /^([^:]+): (.*)$/;
@@ -21,7 +21,7 @@ function parseMoney(value: string | undefined) {
   return Number.isFinite(amount) ? amount : undefined;
 }
 
-function parseActionLine(line: string): ParsedAction | null {
+export function parseActionLine(line: string): ParsedAction | null {
   const match = line.match(ACTION_REGEX);
   if (!match) return null;
 
@@ -58,6 +58,37 @@ function parseActionLine(line: string): ParsedAction | null {
     type: "unknown",
     raw: line,
     isAllIn,
+  };
+}
+
+function extractStreetSection(rawHand: string, street: ParsedStreet) {
+  const streetName = street.toUpperCase();
+  const startMatch = rawHand.match(new RegExp(`\\*\\*\\* ${streetName} \\*\\*\\*`, "i"));
+  if (!startMatch || startMatch.index === undefined) return "";
+
+  const start = startMatch.index + startMatch[0].length;
+  const rest = rawHand.slice(start);
+  const endMatch = rest.match(/\*\*\* (TURN|RIVER|SUMMARY|SHOW DOWN) \*\*\*/i);
+  return endMatch && endMatch.index !== undefined ? rest.slice(0, endMatch.index) : rest;
+}
+
+function parseStreetActions(rawHand: string): ParsedStreetActions {
+  return {
+    flop: extractStreetSection(rawHand, "flop")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .map(parseActionLine)
+      .filter((action): action is ParsedAction => Boolean(action)),
+    turn: extractStreetSection(rawHand, "turn")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .map(parseActionLine)
+      .filter((action): action is ParsedAction => Boolean(action)),
+    river: extractStreetSection(rawHand, "river")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .map(parseActionLine)
+      .filter((action): action is ParsedAction => Boolean(action)),
   };
 }
 
@@ -144,6 +175,7 @@ export function parseHand(rawHand: string): ParsedHand | null {
     .map((line) => line.trim())
     .map(parseActionLine)
     .filter((action): action is ParsedAction => Boolean(action));
+  const postflopActions = parseStreetActions(rawHand);
 
   const smallBlindAmount = preflopActions.find((action) => action.type === "post_sb")?.amount ?? null;
   const bigBlindAmount = preflopActions.find((action) => action.type === "post_bb")?.amount ?? null;
@@ -158,6 +190,7 @@ export function parseHand(rawHand: string): ParsedHand | null {
     activePlayers,
     heroPosition,
     preflopActions,
+    postflopActions,
     smallBlindAmount,
     bigBlindAmount,
   };

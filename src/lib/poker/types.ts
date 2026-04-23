@@ -98,6 +98,10 @@ export type ParsedAction = {
   raw: string;
 };
 
+export type ParsedStreet = "flop" | "turn" | "river";
+
+export type ParsedStreetActions = Record<ParsedStreet, ParsedAction[]>;
+
 export type ParsedHand = {
   id: string;
   raw: string;
@@ -108,6 +112,7 @@ export type ParsedHand = {
   activePlayers: string[];
   heroPosition: Position;
   preflopActions: ParsedAction[];
+  postflopActions: ParsedStreetActions;
   smallBlindAmount: number | null;
   bigBlindAmount: number | null;
 };
@@ -399,4 +404,79 @@ export type AnalysisReport = {
     count: number;
   }[];
   invalidRangeMessage: string | null;
+  blindVsBlind: BlindVsBlindReport;
+};
+
+export type BlindVsBlindStackBucket = "0-10bb" | "10-15bb" | "15-25bb" | "25-40bb" | "40bb+";
+
+export type BlindVsBlindPreflopBranch =
+  | "sb_unopened"
+  | "bb_vs_sb_limp"
+  | "sb_vs_bb_iso"
+  | "bb_vs_sb_open"
+  | "sb_vs_bb_3bet";
+
+export type BlindVsBlindPotType = "limped_pot" | "iso_pot" | "raised_pot" | "3bet_pot";
+
+export type BlindVsBlindPostflopRole = "oop_sb" | "ip_bb";
+
+export type BlindVsBlindPostflopAction =
+  | "check"
+  | "check_back"
+  | "bet_small"
+  | "bet_big"
+  | "raise"
+  | "jam";
+
+export type BlindVsBlindOpportunity = {
+  handId: string;
+  branch: BlindVsBlindPreflopBranch;
+  action: string;
+  actorPosition: "SB" | "BB";
+  stackBucket: BlindVsBlindStackBucket;
+  effectiveStackInBlinds: number;
+  potType?: BlindVsBlindPotType;
+  street?: ParsedStreet;
+  postflopRole?: BlindVsBlindPostflopRole;
+};
+
+export type BlindVsBlindGradeCard = {
+  key: string;
+  label: string;
+  grade: GradeLetter | "N/A";
+  opportunities: number;
+  leakCount: number;
+  leakRate: number;
+  note: string;
+};
+
+export type BlindVsBlindStackSummary = {
+  bucket: BlindVsBlindStackBucket;
+  opportunities: number;
+  jams: number;
+  jamRate: number;
+};
+
+export type BlindVsBlindReport = {
+  totalHands: number;
+  bvbHands: number;
+  opportunities: BlindVsBlindOpportunity[];
+  gradeCards: BlindVsBlindGradeCard[];
+  stackSummary: BlindVsBlindStackSummary[];
+  preflopCounts: {
+    branch: BlindVsBlindPreflopBranch;
+    action: string;
+    count: number;
+  }[];
+  postflopCounts: {
+    potType: BlindVsBlindPotType;
+    street: ParsedStreet;
+    role: BlindVsBlindPostflopRole;
+    action: BlindVsBlindPostflopAction;
+    count: number;
+  }[];
+  topLeaks: {
+    label: string;
+    count: number;
+  }[];
 };
