@@ -301,6 +301,7 @@ function toLeakHandRecord(decision: SupportedDecision, actionFamily: GradingActi
     heroPosition: decision.heroPosition,
     preferredAction: decision.preferredAction,
     leakLabel: decision.leakLabel,
+    jamTrace: decision.jamTrace,
   };
 }
 
@@ -397,14 +398,20 @@ function getDirectionalLeakBuckets(action: GradingActionFamily, decisions: Suppo
           "passed_on_jams",
           "Passed on Jams",
           decisions,
-          (decision) => decision.actualAction !== "Jam" && decision.preferredAction === "Jam",
+          (decision) =>
+            decision.actualAction !== "Jam" &&
+            decision.jamTrace?.result === "clearJam" &&
+            decision.jamTrace.confidence === "high",
           action,
         ),
         wideBucket: makeLeakBucket(
           "jammed_too_wide",
           "Jammed Too Wide",
           decisions,
-          (decision) => decision.actualAction === "Jam" && decision.preferredAction !== "Jam",
+          (decision) =>
+            decision.actualAction === "Jam" &&
+            decision.jamTrace?.result === "clearNonJam" &&
+            decision.jamTrace.confidence === "high",
           action,
         ),
       };

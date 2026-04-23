@@ -11,6 +11,7 @@ import {
   ParsedHand,
   Position,
   PreflopOpportunity,
+  JamType,
   RangeLibraryState,
   SupportedDecision,
 } from "./types";
@@ -207,6 +208,8 @@ function buildOpportunity(
   fallbackNodeKeys: string[],
   branchSummary: string,
   family: PreflopOpportunity["family"],
+  jamType?: JamType,
+  facingPosition?: Position,
   extraFallbackNodeKeys: string[] = [],
 ): PreflopOpportunity {
   const actualAction = normalizeAction(context.heroAction, context.facingAmount);
@@ -228,6 +231,8 @@ function buildOpportunity(
     effectiveStackInBlinds: context.effectiveStackInBlinds,
     stackBucket: getStackDepthBucket(context.effectiveStackInBlinds),
     actualAction,
+    jamType,
+    facingPosition,
     handText: hand.raw,
     contextSummary: `${hand.heroPosition} holding ${hand.heroCards.shorthand}`,
     branchSummary,
@@ -251,6 +256,8 @@ export function scorePreflopOpportunity(
     effectiveStackInBlinds: opportunity.effectiveStackInBlinds,
     stackBucket: opportunity.stackBucket,
     actualAction: opportunity.actualAction,
+    jamType: opportunity.jamType,
+    facingPosition: opportunity.facingPosition,
     preferredAction: "Fold",
     handText: opportunity.handText,
     contextSummary: opportunity.contextSummary,
@@ -311,6 +318,7 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
         fallbackNodeKeys,
         `Unopened pot with ${context.priorLimpers.length} limper${context.priorLimpers.length === 1 ? "" : "s"}`,
         "unopened",
+        "jamVsLimp",
       );
     }
 
@@ -322,6 +330,7 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
       ["unopened_default_decision"],
       "Unopened spot",
       "unopened",
+      "openJam",
     );
   }
 
@@ -343,6 +352,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
         family === "blind_defense" ? ["blind_defense_default_decision", "squeeze_default_decision"] : ["squeeze_default_decision"],
         `Facing ${toNodeLabel(opener.position)} open plus ${context.priorCallers.length} caller${context.priorCallers.length === 1 ? "" : "s"}`,
         family,
+        family === "blind_defense" && opener.position === "SB" ? "blindVsBlindJam" : "reshoveVsOpen",
+        opener.position,
       );
     }
 
@@ -360,6 +371,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
       family === "blind_defense" ? ["blind_defense_default_decision", "facing_open_default_decision"] : ["facing_open_default_decision"],
       branchSummary,
       family,
+      family === "blind_defense" && opener.position === "SB" ? "blindVsBlindJam" : "reshoveVsOpen",
+      opener.position,
     );
   }
 
@@ -383,6 +396,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
         ["facing_3bet_default_decision"],
         branchSummary,
         "facing_3bet",
+        "jamVs3bet",
+        threeBet.position,
       );
     }
 
@@ -397,6 +412,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
       ["facing_3bet_default_decision"],
       branchSummary,
       "facing_3bet",
+      "jamVs3bet",
+      threeBet.position,
     );
   }
 
@@ -420,6 +437,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
         ["facing_4bet_default_decision"],
         branchSummary,
         "facing_4bet",
+        "jamVs3bet",
+        fourBet.position,
       );
     }
 
@@ -434,6 +453,8 @@ export function classifyPreflopOpportunity(hand: ParsedHand): PreflopOpportunity
       ["facing_4bet_default_decision"],
       branchSummary,
       "facing_4bet",
+      "jamVs3bet",
+      fourBet.position,
     );
   }
 

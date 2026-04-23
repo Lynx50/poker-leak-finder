@@ -156,6 +156,30 @@ function LeakHandCard({ hand }: { hand: LeakHandRecord }) {
         <p className="mt-1 text-sm leading-relaxed text-white">{hand.actionSummary}</p>
       </div>
 
+      {hand.jamTrace && (
+        <details className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">Jam classification trace</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {[
+              ["Jam family", hand.jamTrace.jamFamily],
+              ["Hero position", hand.jamTrace.heroPos],
+              ["Villain position", hand.jamTrace.villainPos ?? "N/A"],
+              ["Effective stack", formatStack(hand.jamTrace.effectiveBb)],
+              ["Bucket", hand.jamTrace.bucket],
+              ["Baseline node", hand.jamTrace.baselineNode],
+              ["Baseline source", hand.jamTrace.baselineSource],
+              ["Confidence", hand.jamTrace.confidence],
+              ["Result", hand.jamTrace.result],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-border bg-card px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+                <p className="mt-1 text-sm text-white">{value}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       <details className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
         <summary className="cursor-pointer text-sm font-medium text-muted-foreground">Raw hand history</summary>
         <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-xs leading-relaxed text-slate-200">

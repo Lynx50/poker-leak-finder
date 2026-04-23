@@ -145,6 +145,24 @@ export type DecisionFamily =
   | "blind_defense";
 
 export type GradingActionFamily = "RFI" | "Call" | "3-bet" | "Fold" | "Jam";
+export type JamType =
+  | "openJam"
+  | "reshoveVsOpen"
+  | "jamVsLimp"
+  | "blindVsBlindJam"
+  | "jamVs3bet";
+export type JamDecisionResult = "clearJam" | "clearNonJam" | "borderlineOrUnsupported";
+export type JamDecisionTrace = {
+  jamFamily: JamType;
+  heroPos: Position;
+  villainPos?: Position;
+  effectiveBb: number;
+  bucket: StackDepthBucket;
+  baselineNode: string;
+  baselineSource: string;
+  confidence: "high" | "medium" | "low";
+  result: JamDecisionResult;
+};
 
 export type GradeLetter = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D" | "E" | "F";
 
@@ -257,6 +275,8 @@ export type PreflopOpportunity = {
   effectiveStackInBlinds: number;
   stackBucket: StackDepthBucket;
   actualAction: string;
+  jamType?: JamType;
+  facingPosition?: Position;
   handText: string;
   contextSummary: string;
   branchSummary: string;
@@ -293,10 +313,16 @@ export type SupportedDecision = {
   nodeSupport: "strong" | "medium" | "weak";
   confidenceTier: DecisionConfidenceTier;
   stackBucket: StackDepthBucket;
+  comparedNodeKey?: string;
+  comparedStackBucket?: string;
   usesFallback: boolean;
   isMistake: boolean;
   rangeSourceUsed: RangeSourceKind;
   rangeLabelUsed: string;
+  jamType?: JamType;
+  facingPosition?: Position;
+  jamClassificationConfidence?: "high" | "medium" | "low";
+  jamTrace?: JamDecisionTrace;
   handText: string;
   contextSummary: string;
   branchSummary: string;
@@ -320,6 +346,8 @@ export type DecisionSeed = {
   effectiveStackInBlinds: number;
   stackBucket: StackDepthBucket;
   actualAction: string;
+  jamType?: JamType;
+  facingPosition?: Position;
   preferredAction: string;
   handText: string;
   contextSummary: string;
@@ -330,6 +358,7 @@ export type RangeResolution = {
   preferredAction: RangeAction;
   sourceUsed: RangeSourceKind;
   sourceLabel: string;
+  resolvedNodeKey: string;
   nodeSupport: SupportedDecision["nodeSupport"];
   stackBucket: string;
   usesFallback: boolean;
@@ -476,6 +505,7 @@ export type LeakHandRecord = {
   heroPosition?: Position;
   preferredAction?: string;
   leakLabel?: string;
+  jamTrace?: JamDecisionTrace;
   potType?: BlindVsBlindPotType;
   street?: ParsedStreet;
   postflopRole?: BlindVsBlindPostflopRole;
