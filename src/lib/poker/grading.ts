@@ -163,7 +163,7 @@ function capProvisionalGrade(grade: GradeLetter): GradeLetter {
 
 type OpportunityLike = Pick<
   PreflopOpportunity,
-  "actualAction" | "family" | "branchSummary" | "heroPosition" | "stackBucket" | "nodeKey" | "tournamentType"
+  "actualAction" | "family" | "branchSummary" | "heroPosition" | "stackBucket" | "nodeKey" | "tournamentType" | "jamType"
 > &
   Partial<Pick<SupportedDecision, "preferredAction" | "mistakeType">>;
 
@@ -175,24 +175,30 @@ export function getGradingActionFamily(decision: OpportunityLike): GradingAction
   return "Fold";
 }
 
+function isJamOpportunity(decision: OpportunityLike) {
+  return (
+    decision.jamType !== undefined ||
+    decision.actualAction === "Jam" ||
+    decision.preferredAction === "Jam" ||
+    decision.branchSummary.toLowerCase().includes("jam")
+  );
+}
+
 export function isActionOpportunity(decision: OpportunityLike, action: GradingActionFamily) {
   switch (action) {
     case "RFI":
-      return decision.family === "unopened";
+      return decision.family === "unopened" && !isJamOpportunity(decision);
     case "Call":
-      return decision.family !== "unopened";
+      return decision.family !== "unopened" && !isJamOpportunity(decision);
     case "3-bet":
-      return decision.family === "facing_open" || decision.family === "blind_defense" || decision.family === "squeeze";
-    case "Jam":
       return (
-        decision.actualAction === "Jam" ||
-        decision.preferredAction === "Jam" ||
-        decision.mistakeType === "under_jam" ||
-        decision.mistakeType === "over_jam" ||
-        decision.branchSummary.toLowerCase().includes("jam")
+        !isJamOpportunity(decision) &&
+        (decision.family === "facing_open" || decision.family === "blind_defense" || decision.family === "squeeze")
       );
+    case "Jam":
+      return isJamOpportunity(decision);
     case "Fold":
-      return true;
+      return !isJamOpportunity(decision);
   }
 }
 
@@ -205,7 +211,7 @@ export function getDecisionOpportunityActions(decisions: OpportunityLike[]) {
 
 function actionMatchesFamily(action: string, family: GradingActionFamily) {
   if (family === "Fold") return action === "Fold";
-  if (family === "RFI" || family === "3-bet") return action === "Raise" || action === "Jam";
+  if (family === "RFI" || family === "3-bet") return action === "Raise";
   return action === family;
 }
 
@@ -279,6 +285,10 @@ function isRaiseLike(action: string) {
   return action === "Raise" || action === "Jam";
 }
 
+function isPureRaise(action: string) {
+  return action === "Raise";
+}
+
 function isDefendLike(action: string) {
   return action !== "Fold";
 }
@@ -330,14 +340,22 @@ function getDirectionalLeakBuckets(action: GradingActionFamily, decisions: Suppo
           "folded_too_tight",
           "Folded Too Tight",
           decisions,
-          (decision) => decision.family === "unopened" && decision.actualAction === "Fold" && isRaiseLike(decision.preferredAction),
+          (decision) =>
+            decision.family === "unopened" &&
+            !decision.jamType &&
+            decision.actualAction === "Fold" &&
+            isPureRaise(decision.preferredAction),
           action,
         ),
         wideBucket: makeLeakBucket(
           "opened_too_wide",
           "Opened Too Wide",
           decisions,
-          (decision) => decision.family === "unopened" && isRaiseLike(decision.actualAction) && decision.preferredAction === "Fold",
+          (decision) =>
+            decision.family === "unopened" &&
+            !decision.jamType &&
+            isPureRaise(decision.actualAction) &&
+            decision.preferredAction === "Fold",
           action,
         ),
       };
@@ -364,14 +382,14 @@ function getDirectionalLeakBuckets(action: GradingActionFamily, decisions: Suppo
           "passed_on_3bets",
           "Passed on 3-Bets",
           decisions,
-          (decision) => !isRaiseLike(decision.actualAction) && isRaiseLike(decision.preferredAction),
+          (decision) => !decision.jamType && !isPureRaise(decision.actualAction) && isPureRaise(decision.preferredAction),
           action,
         ),
         wideBucket: makeLeakBucket(
           "three_bet_too_wide",
           "3-Bet Too Wide",
           decisions,
-          (decision) => isRaiseLike(decision.actualAction) && !isRaiseLike(decision.preferredAction),
+          (decision) => !decision.jamType && isPureRaise(decision.actualAction) && !isPureRaise(decision.preferredAction),
           action,
         ),
       };

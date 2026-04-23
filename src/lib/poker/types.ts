@@ -170,6 +170,7 @@ export type ReasonCode =
   | "exact_node_match"
   | "near_stack_fallback"
   | "weak_fallback"
+  | "stack_bucket_mismatch"
   | "position_confident"
   | "villain_position_confident"
   | "stack_confident"

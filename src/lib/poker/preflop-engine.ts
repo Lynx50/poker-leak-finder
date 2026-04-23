@@ -14,6 +14,10 @@ function hasKnownPosition(position: DecisionSeed["heroPosition"] | DecisionSeed[
   return Boolean(position && position !== "UNKNOWN");
 }
 
+function hasTrustedStackBucket(seed: DecisionSeed, resolution: RangeResolution | null) {
+  return Boolean(resolution?.stackBucket && resolution.stackBucket === seed.stackBucket);
+}
+
 export function determinePreflopFamily(seed: DecisionSeed): PreflopFamily {
   switch (seed.jamType) {
     case "openJam":
@@ -75,6 +79,7 @@ export function determineFacedAction(seed: DecisionSeed, family: PreflopFamily) 
 
 export function determineBaselineSourceType(seed: DecisionSeed, resolution: RangeResolution | null): BaselineSourceType {
   if (!resolution) return "unsupported";
+  if (!hasTrustedStackBucket(seed, resolution)) return "weak_fallback";
   if (!resolution.usesFallback) return "exact";
   if (seed.jamType) return "weak_fallback";
   if (
@@ -132,6 +137,10 @@ export function getConfidenceBundle(
   if (seed.effectiveStackInBlinds > 0) {
     confidenceScore += 0.2;
     reasonCodes.push("stack_confident");
+  }
+
+  if (!hasTrustedStackBucket(seed, resolution)) {
+    reasonCodes.push("stack_bucket_mismatch");
   }
 
   switch (baselineSourceType) {
