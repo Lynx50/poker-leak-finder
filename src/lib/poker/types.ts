@@ -198,6 +198,8 @@ export type GradeCard = {
     tightCount: number;
     wideCount: number;
     tendency: "Too Tight" | "Too Loose" | "Balanced";
+    tightBucket?: LeakBucket;
+    wideBucket?: LeakBucket;
   };
 };
 
@@ -244,6 +246,7 @@ export type PreflopOpportunity = {
   tournamentType?: TournamentType;
   family: DecisionFamily;
   heroCards: string;
+  heroCardsRaw: string;
   heroPosition: Position;
   handTier: HandTier;
   heroStackChips: number;
@@ -265,6 +268,7 @@ export type SupportedDecision = {
   tournamentType?: TournamentType;
   family: DecisionFamily;
   heroCards: string;
+  heroCardsRaw: string;
   heroPosition: Position;
   handTier: HandTier;
   heroStackInBlinds: number;
@@ -309,6 +313,7 @@ export type DecisionSeed = {
   fallbackNodeKeys: string[];
   family: DecisionFamily;
   heroCards: string;
+  heroCardsRaw: string;
   heroPosition: Position;
   handTier: HandTier;
   heroStackInBlinds: number;
@@ -445,7 +450,9 @@ export type BlindVsBlindOpportunity = {
   effectiveStackInBlinds: number;
   effectiveStackInChips: number;
   actorStackInChips: number | null;
+  actorStackInBlinds: number | null;
   heroCards: string;
+  heroCardsRaw: string;
   actionSummary: string;
   rawHand: string;
   potType?: BlindVsBlindPotType;
@@ -453,30 +460,37 @@ export type BlindVsBlindOpportunity = {
   postflopRole?: BlindVsBlindPostflopRole;
 };
 
-export type BlindVsBlindLeakHand = {
+export type LeakHandRecord = {
   handId: string;
   heroCards: string;
-  branch: BlindVsBlindPreflopBranch;
+  heroCardsRaw?: string;
+  displayContext?: string;
+  branch: string;
   action: string;
-  actorPosition: "SB" | "BB";
-  stackBucket: BlindVsBlindStackBucket;
+  actorPosition: string;
+  stackBucket: string;
   effectiveStackInBlinds: number;
-  effectiveStackInChips: number;
-  actorStackInChips: number | null;
+  actorStackInBlinds?: number | null;
   actionSummary: string;
   rawHand: string;
+  heroPosition?: Position;
+  preferredAction?: string;
+  leakLabel?: string;
   potType?: BlindVsBlindPotType;
   street?: ParsedStreet;
   postflopRole?: BlindVsBlindPostflopRole;
 };
 
-export type BlindVsBlindLeakBucket = {
+export type LeakBucket = {
   key: string;
   label: string;
   supported: boolean;
   count: number;
-  hands: BlindVsBlindLeakHand[];
+  hands: LeakHandRecord[];
 };
+
+export type BlindVsBlindLeakHand = LeakHandRecord;
+export type BlindVsBlindLeakBucket = LeakBucket;
 
 export type BlindVsBlindGradeCard = {
   key: string;

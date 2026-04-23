@@ -54,6 +54,11 @@ function getActorStackInChips(hand: ParsedHand, actorPosition: "SB" | "BB") {
   return getSeatByPosition(hand, actorPosition)?.stack ?? null;
 }
 
+function getActorStackInBlinds(hand: ParsedHand, actorPosition: "SB" | "BB") {
+  const chips = getActorStackInChips(hand, actorPosition);
+  return chips !== null ? toBlindCount(chips, hand.bigBlindAmount) : null;
+}
+
 function isVoluntary(action: ParsedAction) {
   return ["fold", "check", "call", "bet", "raise"].includes(action.type);
 }
@@ -88,7 +93,9 @@ function makeOpportunity(
     effectiveStackInBlinds,
     effectiveStackInChips: getEffectiveStackInChips(hand),
     actorStackInChips: getActorStackInChips(hand, actorPosition),
+    actorStackInBlinds: getActorStackInBlinds(hand, actorPosition),
     heroCards: hand.heroCards.shorthand || hand.heroCards.raw || "--",
+    heroCardsRaw: hand.heroCards.raw,
     actionSummary: summarizeActions(hand, extra.street),
     rawHand: hand.raw,
     ...extra,
@@ -271,13 +278,14 @@ function toLeakHand(opportunity: BlindVsBlindOpportunity): BlindVsBlindLeakHand 
   return {
     handId: opportunity.handId,
     heroCards: opportunity.heroCards,
+    heroCardsRaw: opportunity.heroCardsRaw,
+    displayContext: opportunity.actorPosition,
     branch: opportunity.branch,
     action: opportunity.action,
     actorPosition: opportunity.actorPosition,
     stackBucket: opportunity.stackBucket,
     effectiveStackInBlinds: opportunity.effectiveStackInBlinds,
-    effectiveStackInChips: opportunity.effectiveStackInChips,
-    actorStackInChips: opportunity.actorStackInChips,
+    actorStackInBlinds: opportunity.actorStackInBlinds,
     actionSummary: opportunity.actionSummary,
     rawHand: opportunity.rawHand,
     potType: opportunity.potType,

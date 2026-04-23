@@ -5,6 +5,8 @@ import {
   GradeLetter,
   GradingEligibility,
   GradingActionFamily,
+  LeakBucket,
+  LeakHandRecord,
   Position,
   PreflopOpportunity,
   SupportedDecision,
@@ -282,52 +284,129 @@ function isDefendLike(action: string) {
   return action !== "Fold";
 }
 
-function getDirectionalLeakCounts(action: GradingActionFamily, decisions: SupportedDecision[]) {
+function toLeakHandRecord(decision: SupportedDecision, actionFamily: GradingActionFamily): LeakHandRecord {
+  return {
+    handId: decision.handId,
+    heroCards: decision.heroCards,
+    heroCardsRaw: decision.heroCardsRaw,
+    displayContext: `${decision.heroPosition} ${actionFamily}`,
+    branch: decision.nodeKey,
+    action: decision.actualAction,
+    actorPosition: decision.heroPosition,
+    stackBucket: decision.stackBucket,
+    effectiveStackInBlinds: decision.effectiveStackInBlinds,
+    actorStackInBlinds: decision.heroStackInBlinds,
+    actionSummary: decision.branchSummary,
+    rawHand: decision.handText,
+    heroPosition: decision.heroPosition,
+    preferredAction: decision.preferredAction,
+    leakLabel: decision.leakLabel,
+  };
+}
+
+function makeLeakBucket(
+  key: string,
+  label: string,
+  decisions: SupportedDecision[],
+  predicate: (decision: SupportedDecision) => boolean,
+  actionFamily: GradingActionFamily,
+): LeakBucket {
+  const matched = decisions.filter(predicate);
+  return {
+    key,
+    label,
+    supported: true,
+    count: matched.length,
+    hands: matched.map((decision) => toLeakHandRecord(decision, actionFamily)),
+  };
+}
+
+function getDirectionalLeakBuckets(action: GradingActionFamily, decisions: SupportedDecision[]) {
   switch (action) {
     case "RFI":
       return {
-        tightCount: decisions.filter(
+        tightBucket: makeLeakBucket(
+          "folded_too_tight",
+          "Folded Too Tight",
+          decisions,
           (decision) => decision.family === "unopened" && decision.actualAction === "Fold" && isRaiseLike(decision.preferredAction),
-        ).length,
-        wideCount: decisions.filter(
+          action,
+        ),
+        wideBucket: makeLeakBucket(
+          "opened_too_wide",
+          "Opened Too Wide",
+          decisions,
           (decision) => decision.family === "unopened" && isRaiseLike(decision.actualAction) && decision.preferredAction === "Fold",
-        ).length,
+          action,
+        ),
       };
     case "Call":
       return {
-        tightCount: decisions.filter(
+        tightBucket: makeLeakBucket(
+          "folded_too_tight",
+          "Folded Too Tight",
+          decisions,
           (decision) => decision.actualAction === "Fold" && decision.preferredAction === "Call",
-        ).length,
-        wideCount: decisions.filter(
+          action,
+        ),
+        wideBucket: makeLeakBucket(
+          "called_too_wide",
+          "Called Too Wide",
+          decisions,
           (decision) => decision.actualAction === "Call" && decision.preferredAction === "Fold",
-        ).length,
+          action,
+        ),
       };
     case "3-bet":
       return {
-        tightCount: decisions.filter(
+        tightBucket: makeLeakBucket(
+          "passed_on_3bets",
+          "Passed on 3-Bets",
+          decisions,
           (decision) => !isRaiseLike(decision.actualAction) && isRaiseLike(decision.preferredAction),
-        ).length,
-        wideCount: decisions.filter(
+          action,
+        ),
+        wideBucket: makeLeakBucket(
+          "three_bet_too_wide",
+          "3-Bet Too Wide",
+          decisions,
           (decision) => isRaiseLike(decision.actualAction) && !isRaiseLike(decision.preferredAction),
-        ).length,
+          action,
+        ),
       };
     case "Fold":
       return {
-        tightCount: decisions.filter(
+        tightBucket: makeLeakBucket(
+          "overfolded",
+          "Overfolded",
+          decisions,
           (decision) => decision.actualAction === "Fold" && isDefendLike(decision.preferredAction),
-        ).length,
-        wideCount: decisions.filter(
+          action,
+        ),
+        wideBucket: makeLeakBucket(
+          "defended_too_wide",
+          "Defended Too Wide",
+          decisions,
           (decision) => isDefendLike(decision.actualAction) && decision.preferredAction === "Fold",
-        ).length,
+          action,
+        ),
       };
     case "Jam":
       return {
-        tightCount: decisions.filter(
+        tightBucket: makeLeakBucket(
+          "passed_on_jams",
+          "Passed on Jams",
+          decisions,
           (decision) => decision.actualAction !== "Jam" && decision.preferredAction === "Jam",
-        ).length,
-        wideCount: decisions.filter(
+          action,
+        ),
+        wideBucket: makeLeakBucket(
+          "jammed_too_wide",
+          "Jammed Too Wide",
+          decisions,
           (decision) => decision.actualAction === "Jam" && decision.preferredAction !== "Jam",
-        ).length,
+          action,
+        ),
       };
   }
 }
@@ -340,12 +419,16 @@ function getDirectionalLeakSummary(
 
   const labels = DIRECTIONAL_LEAK_LABELS[action];
   const highConfidenceDecisions = scoredDecisions.filter(isHighConfidenceDirectionalDecision);
-  const { tightCount, wideCount } = getDirectionalLeakCounts(action, highConfidenceDecisions);
+  const { tightBucket, wideBucket } = getDirectionalLeakBuckets(action, highConfidenceDecisions);
+  const tightCount = tightBucket.count;
+  const wideCount = wideBucket.count;
 
   return {
     ...labels,
     tightCount,
     wideCount,
+    tightBucket,
+    wideBucket,
     tendency:
       tightCount > wideCount
         ? "Too Tight"

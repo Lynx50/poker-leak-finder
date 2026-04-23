@@ -18,12 +18,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { LeakHandViewer } from "@/components/poker/leak-hand-viewer";
 import { analyzeHandHistories } from "@/lib/poker/analysis";
 import { getBaselineTargetPercent } from "@/lib/poker/baseline-targets";
 import { getDashboardRfiTargetPercent } from "@/lib/poker/dashboard-rfi-targets";
@@ -40,7 +39,7 @@ import {
 import { createImportedRangeState, createManualRangeState, getDefaultRangeLibraryState, loadRangeLibraryState, saveRangeLibraryState } from "@/lib/poker/range-store";
 import { BUILT_IN_RANGE_PACK, exportRangePack, formatRangeTokens, getEffectiveRangeNodes, parseRangeText, validateRangePack } from "@/lib/poker/ranges";
 import { STACK_DEPTH_BUCKETS } from "@/lib/poker/stack-depth";
-import { AnalysisReport, BlindVsBlindGradeCard, BlindVsBlindLeakBucket, BlindVsBlindLeakHand, GradeCard, GradingActionFamily, GradingEligibility, Position, PreflopRangeNode, RangeAction, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
+import { AnalysisReport, BlindVsBlindGradeCard, GradeCard, GradingActionFamily, GradingEligibility, LeakBucket, Position, PreflopRangeNode, RangeAction, RangeLibraryState, RangeSourceKind, SkipReason, TournamentFormatFilter, TournamentType } from "@/lib/poker/types";
 import { cn } from "@/lib/utils";
 
 type AnalysisResult = {
@@ -82,8 +81,9 @@ type DrilldownSelection =
   | { type: "leak"; key: string };
 
 type SelectedBlindVsBlindLeak = {
-  cardLabel: string;
-  bucket: BlindVsBlindLeakBucket;
+  title: string;
+  description?: string;
+  bucket: LeakBucket;
 };
 
 type StoredUploadBatch = {
@@ -276,14 +276,6 @@ function getBlindVsBlindGradeTone(card: BlindVsBlindGradeCard) {
   return "border-orange-500/30 bg-orange-500/10 text-orange-300";
 }
 
-function formatStackInBigBlinds(value: number) {
-  return value > 0 ? `${value.toFixed(1)}bb` : "--";
-}
-
-function formatChipCount(value: number | null) {
-  return value === null ? "--" : value.toLocaleString();
-}
-
 function getBaselineLabelOverride(filter: TournamentFormatFilter) {
   return filter === "pko" || filter === "mystery_bounty" ? "Pending" : undefined;
 }
@@ -311,6 +303,7 @@ function GradeTile({
   metricLabels = { baseline: "Baseline", actual: "Your %" },
   descriptor,
   onClick,
+  onLeakClick,
   active,
   mode = "summary",
 }: {
@@ -323,6 +316,7 @@ function GradeTile({
   };
   descriptor?: string;
   onClick?: () => void;
+  onLeakClick?: (bucket: LeakBucket) => void;
   active?: boolean;
   mode?: "summary" | "detail";
 }) {
@@ -338,12 +332,24 @@ function GradeTile({
     card.status === "not_enough_data" ? "Low sample" : card.status === "provisional" ? "Provisional" : null;
 
   return (
-    <button
-      type="button"
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "rounded-2xl border bg-background p-5 text-left transition hover:border-primary/50 hover:bg-muted/30",
         active ? "border-primary/60 bg-primary/10 shadow-lg shadow-primary/5" : "border-border",
+        onClick ? "cursor-pointer" : "",
       )}
     >
       <div className="flex items-start justify-between gap-4">
@@ -372,14 +378,42 @@ function GradeTile({
       {directionalLeakSummary && (
         <div className="mt-4 grid gap-3">
           {[
-            [directionalLeakSummary.tightLabel, directionalLeakSummary.tightCount.toLocaleString()],
-            [directionalLeakSummary.wideLabel, directionalLeakSummary.wideCount.toLocaleString()],
-          ].map(([label, value]) => (
-            <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/40 px-4 py-2.5">
-              <span className="text-sm font-medium text-muted-foreground">{label}</span>
-              <span className="font-mono text-xl font-semibold text-white">{value}</span>
-            </div>
-          ))}
+            directionalLeakSummary.tightBucket
+              ? directionalLeakSummary.tightBucket
+              : {
+                  key: "tight",
+                  label: directionalLeakSummary.tightLabel,
+                  supported: false,
+                  count: directionalLeakSummary.tightCount,
+                  hands: [],
+                },
+            directionalLeakSummary.wideBucket
+              ? directionalLeakSummary.wideBucket
+              : {
+                  key: "wide",
+                  label: directionalLeakSummary.wideLabel,
+                  supported: false,
+                  count: directionalLeakSummary.wideCount,
+                  hands: [],
+                },
+          ].map((bucket) => {
+            const isClickable = Boolean(onLeakClick && bucket.count > 0);
+            return (
+              <button
+                key={bucket.key}
+                type="button"
+                disabled={!isClickable}
+                onClick={() => isClickable && onLeakClick?.(bucket)}
+                className={cn(
+                  "grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-xl border border-border bg-card/40 px-4 py-2.5 text-left",
+                  isClickable ? "transition hover:border-primary/50 hover:bg-primary/10" : "cursor-default",
+                )}
+              >
+                <span className="text-sm font-medium text-muted-foreground">{bucket.label}</span>
+                <span className="font-mono text-xl font-semibold text-white">{bucket.count.toLocaleString()}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -392,7 +426,7 @@ function GradeTile({
         )}
       </div>
       {mode === "detail" && <Progress value={card.confidence * 100} className="mt-2 h-1.5" />}
-    </button>
+    </div>
   );
 }
 
@@ -403,7 +437,7 @@ function BlindVsBlindTile({
 }: {
   card: BlindVsBlindGradeCard;
   targetLabel: string;
-  onLeakClick: (bucket: BlindVsBlindLeakBucket) => void;
+  onLeakClick: (bucket: LeakBucket) => void;
 }) {
   const yourPercentLabel = card.actionFrequency && card.actionFrequency.opportunities > 0
     ? formatOneDecimalPercent(card.actionFrequency.actualPercent)
@@ -464,51 +498,6 @@ function BlindVsBlindTile({
   );
 }
 
-function BlindVsBlindLeakHandCard({ hand }: { hand: BlindVsBlindLeakHand }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="font-mono text-lg font-semibold text-white">{hand.heroCards}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {hand.actorPosition} / {hand.branch} / {hand.action}
-          </p>
-        </div>
-        <Badge variant="outline" className="w-fit border-primary/30 bg-primary/10 text-primary">
-          {hand.stackBucket}
-        </Badge>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-background px-3 py-2">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">Actor Stack</p>
-          <p className="mt-1 font-mono text-base text-white">{formatChipCount(hand.actorStackInChips)}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-background px-3 py-2">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">Effective Stack</p>
-          <p className="mt-1 font-mono text-base text-white">{formatChipCount(hand.effectiveStackInChips)}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-background px-3 py-2">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">Effective BB</p>
-          <p className="mt-1 font-mono text-base text-white">{formatStackInBigBlinds(hand.effectiveStackInBlinds)}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">Action Summary</p>
-        <p className="mt-1 text-sm leading-relaxed text-white">{hand.actionSummary}</p>
-      </div>
-
-      <details className="mt-4 rounded-xl border border-border bg-background px-3 py-2">
-        <summary className="cursor-pointer text-sm font-medium text-muted-foreground">Raw hand history</summary>
-        <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-xs leading-relaxed text-slate-200">
-          {hand.rawHand}
-        </pre>
-      </details>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rangeImportRef = useRef<HTMLInputElement | null>(null);
@@ -562,6 +551,10 @@ export default function Dashboard() {
   useEffect(() => {
     setRangeEditor(createEditorState(selectedRangeNode));
   }, [selectedRangeNodeKey, selectedRangeNode]);
+
+  const openLeakViewer = (title: string, bucket: LeakBucket, description?: string) => {
+    setSelectedBlindVsBlindLeak({ title, bucket, description });
+  };
 
   const filteredResults = useMemo(() => {
     return results.filter((result) => {
@@ -1346,6 +1339,9 @@ export default function Dashboard() {
                       descriptor="Open-raise frequency from this position"
                       active={selectedDrilldown?.type === "position" && selectedDrilldown.key === card.key}
                       onClick={() => setSelectedDrilldown({ type: "position", key: card.key as Position })}
+                      onLeakClick={(bucket) =>
+                        openLeakViewer(`${card.label} leak hands`, bucket, `Open-raise frequency from ${card.label}.`)
+                      }
                     />
                   ))}
                 </div>
@@ -1516,6 +1512,9 @@ export default function Dashboard() {
                             }
                           : undefined
                       }
+                      onLeakClick={(bucket) =>
+                        openLeakViewer(`${card.label} leak hands`, bucket, `${card.label} directional leak drilldown.`)
+                      }
                     />
                   ))}
                 </div>
@@ -1623,6 +1622,9 @@ export default function Dashboard() {
                                 baselineTarget={getCardBaselineTarget(card.key)}
                                 baselineLabelOverride={baselineLabelOverride}
                                 mode="detail"
+                                onLeakClick={(bucket) =>
+                                  openLeakViewer(`${card.label} leak hands`, bucket, `${card.label} by stack depth.`)
+                                }
                               />
                             </div>
                           </div>
@@ -1678,7 +1680,9 @@ export default function Dashboard() {
                         key={card.key}
                         card={card}
                         targetLabel={targetLabel}
-                        onLeakClick={(bucket) => setSelectedBlindVsBlindLeak({ cardLabel: card.label, bucket })}
+                        onLeakClick={(bucket) =>
+                          openLeakViewer(`${card.label} leak hands`, bucket, `${card.label} directional leak drilldown.`)
+                        }
                       />
                     );
                   })}
@@ -2505,35 +2509,13 @@ export default function Dashboard() {
         </section>
       </main>
 
-      <Dialog open={Boolean(selectedBlindVsBlindLeak)} onOpenChange={(open) => !open && setSelectedBlindVsBlindLeak(null)}>
-        <DialogContent className="max-h-[90vh] max-w-4xl border-border bg-background">
-          <DialogHeader>
-            <DialogTitle className="text-2xl text-white">
-              {selectedBlindVsBlindLeak
-                ? `${selectedBlindVsBlindLeak.bucket.label} - ${selectedBlindVsBlindLeak.bucket.count.toLocaleString()} hands`
-                : "Blind vs blind leak hands"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedBlindVsBlindLeak
-                ? `${selectedBlindVsBlindLeak.cardLabel}. These are the real classified hands behind this leak counter.`
-                : "Select a blind-vs-blind leak counter to view the underlying hands."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <ScrollArea className="max-h-[68vh] pr-4">
-            <div className="space-y-4">
-              {(selectedBlindVsBlindLeak?.bucket.hands ?? []).map((hand, index) => (
-                <BlindVsBlindLeakHandCard key={`${hand.handId}-${hand.branch}-${hand.action}-${hand.street ?? "preflop"}-${index}`} hand={hand} />
-              ))}
-              {selectedBlindVsBlindLeak && selectedBlindVsBlindLeak.bucket.hands.length === 0 && (
-                <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                  No backing hands are available for this leak bucket. Unsupported buckets intentionally show a placeholder instead of fake hand data.
-                </p>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      <LeakHandViewer
+        open={Boolean(selectedBlindVsBlindLeak)}
+        onOpenChange={(open) => !open && setSelectedBlindVsBlindLeak(null)}
+        title={selectedBlindVsBlindLeak?.title ?? "Leak hands"}
+        description={selectedBlindVsBlindLeak?.description}
+        bucket={selectedBlindVsBlindLeak?.bucket ?? null}
+      />
     </div>
   );
 }
