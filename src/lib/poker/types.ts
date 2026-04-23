@@ -145,6 +145,18 @@ export type DecisionFamily =
   | "blind_defense";
 
 export type GradingActionFamily = "RFI" | "Call" | "3-bet" | "Fold" | "Jam";
+export type PreflopFamily =
+  | "unopened_rfi"
+  | "facing_open_call_or_3bet"
+  | "reshove_vs_open"
+  | "open_jam"
+  | "jam_vs_limp"
+  | "blind_vs_blind_unopened"
+  | "blind_vs_blind_vs_limp"
+  | "blind_vs_blind_vs_open"
+  | "facing_3bet"
+  | "facing_4bet"
+  | "unsupported_preflop_spot";
 export type JamType =
   | "openJam"
   | "reshoveVsOpen"
@@ -152,6 +164,22 @@ export type JamType =
   | "blindVsBlindJam"
   | "jamVs3bet";
 export type JamDecisionResult = "clearJam" | "clearNonJam" | "borderlineOrUnsupported";
+export type BaselineSourceType = "exact" | "near_fallback" | "weak_fallback" | "unsupported";
+export type ClassificationResult = "clear_good" | "clear_bad" | "mixed_or_borderline" | "unsupported";
+export type ReasonCode =
+  | "exact_node_match"
+  | "near_stack_fallback"
+  | "weak_fallback"
+  | "position_confident"
+  | "villain_position_confident"
+  | "stack_confident"
+  | "family_confident"
+  | "unsupported_spot"
+  | "mixed_frequency_spot"
+  | "premium_sanity_guard"
+  | "no_trusted_jam_baseline"
+  | "jam_family_known"
+  | "facing_action_known";
 export type JamDecisionTrace = {
   jamFamily: JamType;
   heroPos: Position;
@@ -162,6 +190,24 @@ export type JamDecisionTrace = {
   baselineSource: string;
   confidence: "high" | "medium" | "low";
   result: JamDecisionResult;
+};
+export type PreflopDecisionTrace = {
+  handId: string;
+  preflopFamily: PreflopFamily;
+  heroPosition: Position;
+  villainPosition?: Position;
+  facedAction: string;
+  actorStackBb: number;
+  effectiveStackBb: number;
+  stackBucket: StackDepthBucket;
+  baselineNodeId?: string;
+  baselineSourceType: BaselineSourceType;
+  confidenceScore: number;
+  confidence: "high" | "medium" | "low";
+  classificationResult: ClassificationResult;
+  userFacingLabel?: string;
+  reasonCodes: ReasonCode[];
+  jamTrace?: JamDecisionTrace;
 };
 
 export type GradeLetter = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D" | "E" | "F";
@@ -323,6 +369,7 @@ export type SupportedDecision = {
   facingPosition?: Position;
   jamClassificationConfidence?: "high" | "medium" | "low";
   jamTrace?: JamDecisionTrace;
+  decisionTrace: PreflopDecisionTrace;
   handText: string;
   contextSummary: string;
   branchSummary: string;
@@ -506,6 +553,7 @@ export type LeakHandRecord = {
   preferredAction?: string;
   leakLabel?: string;
   jamTrace?: JamDecisionTrace;
+  decisionTrace?: PreflopDecisionTrace;
   potType?: BlindVsBlindPotType;
   street?: ParsedStreet;
   postflopRole?: BlindVsBlindPostflopRole;

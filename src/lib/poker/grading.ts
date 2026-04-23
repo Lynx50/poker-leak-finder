@@ -270,9 +270,8 @@ const DIRECTIONAL_LEAK_LABELS: Record<GradingActionFamily, { tightLabel: string;
 
 function isHighConfidenceDirectionalDecision(decision: SupportedDecision) {
   return (
-    decision.confidenceTier === "clean" &&
-    decision.nodeSupport === "strong" &&
-    !decision.usesFallback
+    decision.decisionTrace.classificationResult === "clear_bad" &&
+    decision.decisionTrace.confidence === "high"
   );
 }
 
@@ -302,6 +301,7 @@ function toLeakHandRecord(decision: SupportedDecision, actionFamily: GradingActi
     preferredAction: decision.preferredAction,
     leakLabel: decision.leakLabel,
     jamTrace: decision.jamTrace,
+    decisionTrace: decision.decisionTrace,
   };
 }
 
